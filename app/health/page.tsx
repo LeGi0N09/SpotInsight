@@ -12,10 +12,9 @@ export default function HealthPage() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const base = process.env.NEXT_PUBLIC_SITE_URL || "http://127.0.0.1:3000";
       const [healthRes, profileRes] = await Promise.all([
-        fetch(`${base}/api/health`),
-        fetch(`${base}/api/spotify/me`, { cache: "no-store" }),
+        fetch(`/api/health`),
+        fetch(`/api/spotify/me`, { cache: "no-store" }),
       ]);
       setHealth(healthRes.ok ? await healthRes.json() : null);
       setProfile(profileRes.ok ? await profileRes.json() : {});

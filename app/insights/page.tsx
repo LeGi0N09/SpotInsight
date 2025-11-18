@@ -12,10 +12,9 @@ export default function InsightsPage() {
 
   useEffect(() => {
     async function fetchData() {
-      const base = process.env.NEXT_PUBLIC_SITE_URL || "http://127.0.0.1:3000";
       const [insightsRes, profileRes] = await Promise.all([
-        fetch(`${base}/api/insights`, { cache: "no-store" }),
-        fetch(`${base}/api/spotify/me`, { cache: "no-store" }),
+        fetch(`/api/insights`, { cache: "no-store" }),
+        fetch(`/api/spotify/me`, { cache: "no-store" }),
       ]);
       const insightsData = insightsRes.ok ? await insightsRes.json() : { insights: [] };
       setInsights(insightsData.insights || []);

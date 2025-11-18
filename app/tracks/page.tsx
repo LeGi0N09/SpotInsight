@@ -13,10 +13,9 @@ export default function TracksPage() {
 
   useEffect(() => {
     async function fetchData() {
-      const base = process.env.NEXT_PUBLIC_SITE_URL || "http://127.0.0.1:3000";
       const [statsRes, profileRes] = await Promise.all([
-        fetch(`${base}/api/stats?filter=${filter}`, { cache: "no-store" }),
-        fetch(`${base}/api/spotify/me`, { cache: "no-store" }),
+        fetch(`/api/stats?filter=${filter}`, { cache: "no-store" }),
+        fetch(`/api/spotify/me`, { cache: "no-store" }),
       ]);
       setStats(statsRes.ok ? await statsRes.json() : {});
       setProfile(profileRes.ok ? await profileRes.json() : {});

@@ -15,10 +15,9 @@ export default function ActivityPage() {
   useEffect(() => {
     async function fetchData(showLoading = true) {
       if (showLoading) setLoading(true);
-      const base = process.env.NEXT_PUBLIC_SITE_URL || "http://127.0.0.1:3000";
       const [playsRes, profileRes] = await Promise.all([
-        fetch(`${base}/api/plays`, { cache: "no-store" }),
-        fetch(`${base}/api/spotify/me`, { cache: "no-store" }),
+        fetch(`/api/plays`, { cache: "no-store" }),
+        fetch(`/api/spotify/me`, { cache: "no-store" }),
       ]);
       const newPlays = playsRes.ok ? await playsRes.json() : [];
       setPlays(newPlays);
