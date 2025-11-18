@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const revalidate = 60; // Revalidate every 60 seconds
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const filter = url.searchParams.get("filter") || "alltime";
@@ -47,7 +49,7 @@ export async function GET(req: Request) {
 
     // Get play counts from plays table
     const playsRes = await fetch(
-      `${supabaseUrl}/rest/v1/plays?select=raw_json`,
+      `${supabaseUrl}/rest/v1/plays?select=track_id,artist_name,ms_played`,
       {
         headers: {
           apikey: supabaseKey,
@@ -57,18 +59,24 @@ export async function GET(req: Request) {
     );
     const plays = await playsRes.json();
 
-    // Count plays per track and artist
+    // Count plays by ID and artist name
     const trackPlayCounts: Record<string, number> = {};
-    const artistPlayCounts: Record<string, number> = {};
+    const trackTotalTime: Record<string, number> = {};
+    const artistNameCounts: Record<string, number> = {};
+    const artistNameTime: Record<string, number> = {};
 
     for (const play of plays) {
-      const track = play.raw_json?.track;
-      if (!track) continue;
-
-      trackPlayCounts[track.id] = (trackPlayCounts[track.id] || 0) + 1;
-
-      for (const artist of track.artists || []) {
-        artistPlayCounts[artist.id] = (artistPlayCounts[artist.id] || 0) + 1;
+      const duration = play.ms_played || 180000;
+      
+      if (play.track_id) {
+        trackPlayCounts[play.track_id] = (trackPlayCounts[play.track_id] || 0) + 1;
+        trackTotalTime[play.track_id] = (trackTotalTime[play.track_id] || 0) + duration;
+      }
+      
+      if (play.artist_name) {
+        const artistKey = play.artist_name.toLowerCase().trim();
+        artistNameCounts[artistKey] = (artistNameCounts[artistKey] || 0) + 1;
+        artistNameTime[artistKey] = (artistNameTime[artistKey] || 0) + duration;
       }
     }
 
@@ -85,9 +93,8 @@ export async function GET(req: Request) {
       .slice(0, 10)
       .map(([genre, count]) => ({ genre, count }));
 
-    const hasImportedData = plays.length > 100; // If more than 100, user imported history
+    const hasImportedData = plays.length > 100;
 
-    // Format tracks with play counts
     const formattedTracks = topTracks.map((track: any, i: number) => ({
       id: track.id,
       name: track.name,
@@ -95,21 +102,25 @@ export async function GET(req: Request) {
       image: track.album?.images?.[0]?.url,
       rank: i + 1,
       playCount: hasImportedData ? (trackPlayCounts[track.id] || 0) : null,
+      totalTimeMs: hasImportedData ? (trackTotalTime[track.id] || 0) : null,
       duration: track.duration_ms,
       popularity: track.popularity,
     }));
 
-    // Format artists with play counts
-    const formattedArtists = topArtists.map((artist: any, i: number) => ({
-      id: artist.id,
-      name: artist.name,
-      image: artist.images?.[0]?.url,
-      genres: artist.genres,
-      rank: i + 1,
-      playCount: hasImportedData ? (artistPlayCounts[artist.id] || 0) : null,
-      followers: artist.followers?.total,
-      popularity: artist.popularity,
-    }));
+    const formattedArtists = topArtists.map((artist: any, i: number) => {
+      const artistKey = artist.name?.toLowerCase().trim();
+      return {
+        id: artist.id,
+        name: artist.name,
+        image: artist.images?.[0]?.url,
+        genres: artist.genres,
+        rank: i + 1,
+        playCount: hasImportedData ? (artistNameCounts[artistKey] || 0) : null,
+        totalTimeMs: hasImportedData ? (artistNameTime[artistKey] || 0) : null,
+        followers: artist.followers?.total,
+        popularity: artist.popularity,
+      };
+    });
 
     return NextResponse.json({
       filter,

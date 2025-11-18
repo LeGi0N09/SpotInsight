@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const revalidate = 120; // Revalidate every 2 minutes
+
 export async function GET() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
@@ -92,6 +94,16 @@ export async function GET() {
       title: "Active Listening Days",
       value: `${dates.length} days`,
       description: `You've listened to music on ${dates.length} different days`,
+    });
+
+    // Skip detection
+    const skips = plays.filter((p: Play) => (p.ms_played || 0) < 30000).length;
+    const skipRate = plays.length > 0 ? Math.round((skips / plays.length) * 100) : 0;
+    insights.push({
+      type: "skip_rate",
+      title: "Skip Rate",
+      value: `${skipRate}%`,
+      description: `You skipped ${skips} tracks (played < 30s)`,
     });
 
     return NextResponse.json({ insights, totalPlays: plays.length });

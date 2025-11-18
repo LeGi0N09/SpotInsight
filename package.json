@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "cron": "node local-cron.js"
   },
   "dependencies": {
     "lucide-react": "^0.554.0",

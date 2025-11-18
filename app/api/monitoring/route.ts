@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
-import { db } from "../../../lib/db";
+import { monitor } from "../../../lib/monitoring";
+
+export const revalidate = 0;
 
 export async function GET() {
   try {
-    const plays = await db.plays.getRecent(100);
-    return NextResponse.json(plays);
+    const stats = monitor.getStats();
+    return NextResponse.json(stats);
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }

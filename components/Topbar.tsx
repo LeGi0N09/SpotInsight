@@ -32,7 +32,7 @@ export default function Topbar({ profile, onFilterChange, currentFilter = 'allti
   ];
 
   return (
-    <div className="flex items-center justify-between bg-[#0e0e0e] px-4 py-3 border-b border-white/5">
+    <div className="flex items-center justify-end bg-[#0e0e0e] px-4 sm:px-6 py-3 border-b border-white/5">
       <div className="flex items-center gap-3">
         <div className="relative">
           <button 
@@ -43,7 +43,7 @@ export default function Topbar({ profile, onFilterChange, currentFilter = 'allti
             <span>{filters.find(f => f.value === currentFilter)?.label}</span>
           </button>
           {showFilterMenu && (
-            <div className="absolute top-full mt-1 bg-[#171717] rounded-lg shadow-lg py-1 z-10">
+            <div className="absolute top-full mt-1 right-0 bg-[#171717] rounded-lg shadow-lg py-1 z-[70] border border-white/10">
               {filters.map(filter => (
                 <button
                   key={filter.value}
@@ -59,13 +59,10 @@ export default function Topbar({ profile, onFilterChange, currentFilter = 'allti
             </div>
           )}
         </div>
-      </div>
-
-      <div className="flex items-center gap-3">
         <button className="p-2 rounded-full bg-[#171717] hover:bg-[#1f1f1f] transition-colors">
           <Bell className="w-4 h-4" />
         </button>
-        <div className="text-xs opacity-60">{profile.display_name || 'User'}</div>
+        <div className="text-xs opacity-60 hidden sm:block">{profile.display_name || 'User'}</div>
         {profile.images?.[0]?.url ? (
           <img
             src={profile.images[0].url}

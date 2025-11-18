@@ -41,8 +41,8 @@ export default function InsightsPage() {
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Topbar profile={profile} />
-        <main className="flex-1 overflow-y-auto px-4 pb-4">
-          <h2 className="text-2xl font-bold mb-4">Your Listening Insights</h2>
+        <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 pb-4 pt-16 lg:pt-4">
+          <h2 className="text-xl sm:text-2xl font-bold mb-4">Your Listening Insights</h2>
           {loading ? (
             <div className="text-center py-20 opacity-60">Loading insights...</div>
           ) : insights.length === 0 ? (
@@ -51,7 +51,7 @@ export default function InsightsPage() {
               <p className="text-sm opacity-40">Import your streaming history to see personalized insights</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4 animate-fadeIn">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 animate-fadeIn">
               {insights.map((insight, i) => (
                 <div key={i} className="bg-[#111111] rounded-2xl p-6 hover:bg-[#1a1a1a] transition-all">
                   <div className="flex items-start gap-4">

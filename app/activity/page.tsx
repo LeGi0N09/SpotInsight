@@ -10,21 +10,24 @@ export default function ActivityPage() {
   const [plays, setPlays] = useState<any[]>([]);
   const [profile, setProfile] = useState<any>({});
   const [loading, setLoading] = useState(true);
+  const [displayCount, setDisplayCount] = useState(20);
 
   useEffect(() => {
-    async function fetchData() {
+    async function fetchData(showLoading = true) {
+      if (showLoading) setLoading(true);
       const base = process.env.NEXT_PUBLIC_SITE_URL || "http://127.0.0.1:3000";
-
       const [playsRes, profileRes] = await Promise.all([
         fetch(`${base}/api/plays`, { cache: "no-store" }),
         fetch(`${base}/api/spotify/me`, { cache: "no-store" }),
       ]);
-
-      setPlays(playsRes.ok ? await playsRes.json() : []);
+      const newPlays = playsRes.ok ? await playsRes.json() : [];
+      setPlays(newPlays);
       setProfile(profileRes.ok ? await profileRes.json() : {});
       setLoading(false);
     }
     fetchData();
+    const interval = setInterval(() => fetchData(false), 30000); // Background refresh
+    return () => clearInterval(interval);
   }, []);
 
   const formatTime = (timestamp: string) => {
@@ -41,6 +44,14 @@ export default function ActivityPage() {
     return `${days}d ago`;
   };
 
+  const toIST = (timestamp: string) => {
+    return new Date(timestamp).toLocaleString('en-IN', { 
+      timeZone: 'Asia/Kolkata',
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    });
+  };
+
   const groupByDate = (plays: any[]) => {
     const groups: Record<string, any[]> = {};
     plays.forEach(play => {
@@ -51,19 +62,31 @@ export default function ActivityPage() {
     return groups;
   };
 
-  const grouped = groupByDate(plays);
+  const formatDuration = (ms: number) => {
+    const seconds = Math.floor(ms / 1000);
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const visiblePlays = plays.slice(0, displayCount);
+  const grouped = groupByDate(visiblePlays);
+  const hasMore = displayCount < plays.length;
 
   return (
     <div className="flex h-screen">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Topbar profile={profile} />
-        <main className="flex-1 overflow-y-auto px-4 pb-4">
+        <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 pb-24 pt-16 lg:pt-4">
           <NowPlaying />
           
-          <div className="flex items-center justify-between mb-4 mt-6">
-            <h2 className="text-2xl font-bold">Recent Activity</h2>
-            <div className="text-sm opacity-60">{plays.length} plays tracked</div>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-6 mt-6">
+            <h2 className="text-2xl sm:text-3xl font-bold">Recent Activity</h2>
+            <div className="flex items-center gap-2 bg-[#00e461]/10 px-3 py-1.5 rounded-full">
+              <div className="w-2 h-2 rounded-full bg-[#00e461] animate-pulse" />
+              <span className="text-sm font-medium text-[#00e461]">{plays.length} plays</span>
+            </div>
           </div>
 
           {loading ? (
@@ -75,31 +98,63 @@ export default function ActivityPage() {
               <p className="text-sm opacity-40">Sync or import data to see your listening history</p>
             </div>
           ) : (
-            <div className="space-y-6 animate-fadeIn">
+            <div className="space-y-8 animate-fadeIn">
               {Object.entries(grouped).map(([date, dayPlays]) => (
                 <div key={date}>
-                  <div className="text-sm font-semibold opacity-60 mb-3 sticky top-0 bg-black py-2">
-                    {new Date(date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                  <div className="text-sm font-bold opacity-70 mb-4 sticky top-0 bg-black/80 backdrop-blur-sm py-2 z-10">
+                    {new Date(date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', month: 'long', day: 'numeric' })}
                   </div>
                   <div className="space-y-2">
                     {dayPlays.map((play, i) => (
-                      <div key={i} className="bg-[#111111] rounded-xl p-3 hover:bg-[#1a1a1a] transition-colors flex items-center gap-3">
-                        <div className="w-12 h-12 bg-[#00e461]/10 rounded flex items-center justify-center flex-shrink-0">
-                          <Music className="w-5 h-5 text-[#00e461]" />
-                        </div>
+                      <div key={i} className="group bg-[#0a0a0a] rounded-lg p-3 hover:bg-[#1a1a1a] transition-all cursor-pointer flex items-center gap-4">
+                        {play.album_image ? (
+                          <div className="relative flex-shrink-0">
+                            <img 
+                              src={play.album_image} 
+                              alt={play.track_name} 
+                              className="w-14 h-14 rounded shadow-lg"
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded flex items-center justify-center">
+                              <Music className="w-5 h-5 text-white" />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="w-14 h-14 bg-gradient-to-br from-[#00e461]/20 to-[#00e461]/5 rounded flex items-center justify-center flex-shrink-0">
+                            <Music className="w-6 h-6 text-[#00e461]/60" />
+                          </div>
+                        )}
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium truncate">{play.track_name || 'Unknown Track'}</div>
-                          <div className="text-sm opacity-60 truncate">{play.artist_name || 'Unknown Artist'}</div>
+                          <div className="font-semibold truncate text-white/95 group-hover:text-[#00e461] transition-colors">
+                            {play.track_name || 'Unknown Track'}
+                          </div>
+                          <div className="text-sm text-white/60 truncate">
+                            {play.artist_name || 'Unknown Artist'}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 text-xs opacity-60 flex-shrink-0">
-                          <Clock className="w-3 h-3" />
-                          {formatTime(play.played_at)}
+                        <div className="flex items-center gap-3 text-xs text-white/50 flex-shrink-0">
+                          {play.duration_ms && (
+                            <span className="hidden sm:block">{formatDuration(play.duration_ms)}</span>
+                          )}
+                          <div className="flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>{formatTime(play.played_at)}</span>
+                          </div>
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
               ))}
+              {hasMore && (
+                <div className="flex justify-center pt-4">
+                  <button
+                    onClick={() => setDisplayCount(prev => prev + 20)}
+                    className="bg-[#00e461] hover:bg-[#00e461]/90 text-black font-semibold px-6 py-3 rounded-full transition-all hover:scale-105 active:scale-95"
+                  >
+                    Show More ({plays.length - displayCount} remaining)
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </main>

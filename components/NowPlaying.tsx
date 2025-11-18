@@ -5,20 +5,33 @@ import { Play, Pause, Music } from "lucide-react";
 
 export default function NowPlaying() {
   const [nowPlaying, setNowPlaying] = useState<any>(null);
-  const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [localProgress, setLocalProgress] = useState(0);
 
   useEffect(() => {
     const fetchNowPlaying = async () => {
       const res = await fetch("/api/now-playing");
       const data = await res.json();
       setNowPlaying(data);
+      if (data.isPlaying && data.track?.progress) {
+        setLocalProgress(data.track.progress);
+      }
     };
 
     fetchNowPlaying();
-    const interval = setInterval(fetchNowPlaying, 5000); // Poll every 5 seconds for live updates
+    const interval = setInterval(fetchNowPlaying, 30000); // Poll every 30s instead of 5s
 
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!nowPlaying?.isPlaying || !nowPlaying?.track?.duration) return;
+    
+    const interval = setInterval(() => {
+      setLocalProgress(prev => Math.min(prev + 1000, nowPlaying.track.duration));
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [nowPlaying?.isPlaying, nowPlaying?.track?.duration]);
 
   if (!nowPlaying) {
     return (
@@ -37,9 +50,7 @@ export default function NowPlaying() {
   }
 
   const formatTimeAgo = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMinutes = Math.floor((now.getTime() - date.getTime()) / 60000);
+    const diffMinutes = Math.floor((Date.now() - new Date(timestamp).getTime()) / 60000);
     if (diffMinutes < 1) return "Just now";
     if (diffMinutes < 60) return `${diffMinutes}m ago`;
     return `${Math.floor(diffMinutes / 60)}h ago`;
@@ -66,8 +77,8 @@ export default function NowPlaying() {
     );
   }
 
-  const progress = nowPlaying.track.progress && nowPlaying.track.duration 
-    ? (nowPlaying.track.progress / nowPlaying.track.duration) * 100 
+  const progress = localProgress && nowPlaying.track.duration 
+    ? Math.min((localProgress / nowPlaying.track.duration) * 100, 100)
     : 0;
 
   return (
