@@ -26,7 +26,7 @@ export const db = {
       return data?.[0]?.played_at || null;
     },
 
-    insert: async (plays: any[]) => {
+    insert: async (plays: Record<string, unknown>[]) => {
       const res = await fetch(`${supabaseUrl}/rest/v1/plays`, {
         method: "POST",
         headers: { ...headers, Prefer: "return=representation" },
@@ -45,7 +45,7 @@ export const db = {
     },
 
     getAll: async () => {
-      const res = await fetch(`${supabaseUrl}/rest/v1/plays?select=*`, { headers });
+      const res = await fetch(`${supabaseUrl}/rest/v1/plays?select=*&limit=100000`, { headers });
       return res.json();
     },
   },
@@ -57,7 +57,7 @@ export const db = {
       plays_saved?: number;
       duration_ms?: number;
       error_message?: string;
-      response_data?: any;
+      response_data?: Record<string, unknown>;
     }) => {
       const res = await fetch(`${supabaseUrl}/rest/v1/cron_logs`, {
         method: "POST",
@@ -86,7 +86,7 @@ export const db = {
       return data?.[0] || null;
     },
 
-    insert: async (snapshot: any) => {
+    insert: async (snapshot: Record<string, unknown>) => {
       const res = await fetch(`${supabaseUrl}/rest/v1/snapshots`, {
         method: "POST",
         headers,

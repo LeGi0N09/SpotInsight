@@ -16,7 +16,7 @@ export async function GET() {
       Authorization: `Bearer ${supabaseKey}`,
     };
 
-    const playsRes = await fetch(`${supabaseUrl}/rest/v1/plays?select=*`, { headers });
+    const playsRes = await fetch(`${supabaseUrl}/rest/v1/plays?select=*&limit=100000`, { headers });
     const plays = await playsRes.json();
 
     if (!plays || plays.length === 0) {

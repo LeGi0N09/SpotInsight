@@ -47,17 +47,43 @@ export async function GET(req: Request) {
       topArtists = snapshot.top_artists_short || [];
     }
 
-    // Get play counts from plays table
-    const playsRes = await fetch(
-      `${supabaseUrl}/rest/v1/plays?select=track_id,artist_name,ms_played`,
+    // Get total play count
+    const countRes = await fetch(
+      `${supabaseUrl}/rest/v1/plays?select=count`,
       {
         headers: {
           apikey: supabaseKey,
           Authorization: `Bearer ${supabaseKey}`,
+          Prefer: 'count=exact',
         },
       }
     );
-    const plays = await playsRes.json();
+    const countData = await countRes.json();
+    const totalPlays = countData?.[0]?.count || 0;
+
+    // Get play counts from plays table - fetch in chunks if needed
+    let allPlays: any[] = [];
+    let offset = 0;
+    const chunkSize = 10000;
+    
+    while (true) {
+      const playsRes = await fetch(
+        `${supabaseUrl}/rest/v1/plays?select=track_id,track_name,artist_name,ms_played&limit=${chunkSize}&offset=${offset}`,
+        {
+          headers: {
+            apikey: supabaseKey,
+            Authorization: `Bearer ${supabaseKey}`,
+          },
+        }
+      );
+      const chunk = await playsRes.json();
+      if (!chunk || chunk.length === 0) break;
+      allPlays = allPlays.concat(chunk);
+      if (chunk.length < chunkSize) break;
+      offset += chunkSize;
+    }
+    
+    const plays = allPlays;
 
     // Count plays by ID and artist name
     const trackPlayCounts: Record<string, number> = {};
@@ -124,7 +150,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       filter,
-      totalPlays: plays.length || 0,
+      totalPlays,
       hasImportedData,
       topTracks: formattedTracks,
       topArtists: formattedArtists,
