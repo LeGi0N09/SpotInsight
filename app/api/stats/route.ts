@@ -32,20 +32,9 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "No data synced yet" }, { status: 404 });
     }
 
-    // Select data based on filter
-    let topTracks = [];
-    let topArtists = [];
-
-    if (filter === "alltime") {
-      topTracks = snapshot.top_tracks_long || [];
-      topArtists = snapshot.top_artists_long || [];
-    } else if (filter === "year") {
-      topTracks = snapshot.top_tracks_medium || [];
-      topArtists = snapshot.top_artists_medium || [];
-    } else if (filter === "month") {
-      topTracks = snapshot.top_tracks_short || [];
-      topArtists = snapshot.top_artists_short || [];
-    }
+    // Get Spotify metadata for enrichment
+    const spotifyTracks = snapshot.top_tracks_long || [];
+    const spotifyArtists = snapshot.top_artists_long || [];
 
     // Get total play count
     const countRes = await fetch(
@@ -61,54 +50,134 @@ export async function GET(req: Request) {
     const countData = await countRes.json();
     const totalPlays = countData?.[0]?.count || 0;
 
-    // Get play counts from plays table - fetch in chunks if needed
-    let allPlays: any[] = [];
-    let offset = 0;
-    const chunkSize = 10000;
-    
-    while (true) {
-      const playsRes = await fetch(
-        `${supabaseUrl}/rest/v1/plays?select=track_id,track_name,artist_name,ms_played&limit=${chunkSize}&offset=${offset}`,
-        {
-          headers: {
-            apikey: supabaseKey,
-            Authorization: `Bearer ${supabaseKey}`,
-          },
-        }
-      );
-      const chunk = await playsRes.json();
-      if (!chunk || chunk.length === 0) break;
-      allPlays = allPlays.concat(chunk);
-      if (chunk.length < chunkSize) break;
-      offset += chunkSize;
-    }
-    
-    const plays = allPlays;
+    // Get aggregated stats from Supabase RPC function (100x faster)
+    const statsRes = await fetch(
+      `${supabaseUrl}/rest/v1/rpc/get_play_stats`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    const statsData = await statsRes.json();
 
-    // Count plays by ID and artist name
+    // Convert to lookup maps
     const trackPlayCounts: Record<string, number> = {};
     const trackTotalTime: Record<string, number> = {};
     const artistNameCounts: Record<string, number> = {};
     const artistNameTime: Record<string, number> = {};
 
-    for (const play of plays) {
-      const duration = play.ms_played || 180000;
-      
-      if (play.track_id) {
-        trackPlayCounts[play.track_id] = (trackPlayCounts[play.track_id] || 0) + 1;
-        trackTotalTime[play.track_id] = (trackTotalTime[play.track_id] || 0) + duration;
-      }
-      
-      if (play.artist_name) {
-        const artistKey = play.artist_name.toLowerCase().trim();
-        artistNameCounts[artistKey] = (artistNameCounts[artistKey] || 0) + 1;
-        artistNameTime[artistKey] = (artistNameTime[artistKey] || 0) + duration;
+    const trackNames: Record<string, string> = {};
+    const trackArtists: Record<string, string> = {};
+    const trackImages: Record<string, string> = {};
+
+    if (statsData.trackStats) {
+      for (const track of statsData.trackStats) {
+        trackPlayCounts[track.track_id] = track.play_count;
+        trackTotalTime[track.track_id] = track.total_time || 0;
+        trackNames[track.track_id] = track.track_name;
+        trackArtists[track.track_id] = track.artist_name;
+        if (track.album_image) {
+          trackImages[track.track_id] = track.album_image;
+        }
       }
     }
 
-    // Extract genres
+    if (statsData.artistStats) {
+      for (const artist of statsData.artistStats) {
+        const artistName = artist.artist?.trim();
+        if (artistName) {
+          artistNameCounts[artistName] = artist.play_count;
+          artistNameTime[artistName] = artist.total_time || 0;
+        }
+      }
+    }
+
+    // Sort tracks and artists by play count from database
+    const topTracksByPlays = Object.entries(trackPlayCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 50);
+    
+    const topArtistsByPlays = Object.entries(artistNameCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 50);
+
+    // Create metadata lookup
+    type SpotifyTrack = { id: string; name?: string; artists?: Array<{name: string}>; album?: {images?: Array<{url: string}>}; duration_ms?: number; popularity?: number };
+    type SpotifyArtist = { id: string; name: string; images?: Array<{url: string}>; genres?: string[]; followers?: {total: number}; popularity?: number };
+    
+    const trackMetadata = new Map(spotifyTracks.map((t: SpotifyTrack) => [t.id, t]));
+    const artistMetadata = new Map(spotifyArtists.map((a: SpotifyArtist) => [a.name, a]));
+
+    // Format tracks with metadata
+    const formattedTracks = topTracksByPlays.map(([trackId, playCount], i) => {
+      const meta = trackMetadata.get(trackId) as SpotifyTrack | undefined;
+      return {
+        id: trackId,
+        name: meta?.name || trackNames[trackId] || 'Unknown Track',
+        artist: meta?.artists?.map((a: {name: string}) => a.name).join(", ") || trackArtists[trackId] || 'Unknown Artist',
+        image: meta?.album?.images?.[0]?.url || trackImages[trackId],
+        rank: i + 1,
+        playCount,
+        totalTimeMs: trackTotalTime[trackId] || 0,
+        duration: meta?.duration_ms,
+        popularity: meta?.popularity || 0,
+      };
+    });
+
+    // Fetch missing artist metadata from Spotify
+    const artistsNeedingMetadata = topArtistsByPlays
+      .filter(([artistName]) => !artistMetadata.has(artistName))
+      .slice(0, 10)
+      .map(([artistName]) => artistName);
+
+    if (artistsNeedingMetadata.length > 0) {
+      const { spotifyFetch } = await import('../../lib/spotify');
+      for (const artistName of artistsNeedingMetadata) {
+        try {
+          const searchRes = await spotifyFetch(`/search?q=${encodeURIComponent(artistName)}&type=artist&limit=1`);
+          if (searchRes.ok) {
+            const data = await searchRes.json();
+            const artist = data.artists?.items?.[0];
+            if (artist) {
+              artistMetadata.set(artistName, {
+                id: artist.id,
+                name: artist.name,
+                images: artist.images,
+                genres: artist.genres,
+                followers: artist.followers,
+                popularity: artist.popularity,
+              });
+            }
+          }
+        } catch {
+          console.error(`[stats] Failed to fetch artist: ${artistName}`);
+        }
+      }
+    }
+
+    // Format artists with metadata
+    const formattedArtists = topArtistsByPlays.map(([artistName, playCount], i) => {
+      const meta = artistMetadata.get(artistName) as SpotifyArtist | undefined;
+      return {
+        id: meta?.id || artistName,
+        name: artistName,
+        image: meta?.images?.[0]?.url,
+        genres: meta?.genres || [],
+        rank: i + 1,
+        playCount,
+        totalTimeMs: artistNameTime[artistName] || 0,
+        followers: meta?.followers?.total,
+        popularity: meta?.popularity,
+      };
+    });
+
+    // Extract genres from top artists
     const genreCounts: Record<string, number> = {};
-    for (const artist of topArtists) {
+    for (const artist of formattedArtists) {
       for (const genre of artist.genres || []) {
         genreCounts[genre] = (genreCounts[genre] || 0) + 1;
       }
@@ -119,34 +188,7 @@ export async function GET(req: Request) {
       .slice(0, 10)
       .map(([genre, count]) => ({ genre, count }));
 
-    const hasImportedData = plays.length > 100;
-
-    const formattedTracks = topTracks.map((track: any, i: number) => ({
-      id: track.id,
-      name: track.name,
-      artist: track.artists?.map((a: any) => a.name).join(", "),
-      image: track.album?.images?.[0]?.url,
-      rank: i + 1,
-      playCount: hasImportedData ? (trackPlayCounts[track.id] || 0) : null,
-      totalTimeMs: hasImportedData ? (trackTotalTime[track.id] || 0) : null,
-      duration: track.duration_ms,
-      popularity: track.popularity,
-    }));
-
-    const formattedArtists = topArtists.map((artist: any, i: number) => {
-      const artistKey = artist.name?.toLowerCase().trim();
-      return {
-        id: artist.id,
-        name: artist.name,
-        image: artist.images?.[0]?.url,
-        genres: artist.genres,
-        rank: i + 1,
-        playCount: hasImportedData ? (artistNameCounts[artistKey] || 0) : null,
-        totalTimeMs: hasImportedData ? (artistNameTime[artistKey] || 0) : null,
-        followers: artist.followers?.total,
-        popularity: artist.popularity,
-      };
-    });
+    const hasImportedData = totalPlays > 100;
 
     return NextResponse.json({
       filter,

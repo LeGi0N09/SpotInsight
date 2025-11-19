@@ -4,57 +4,61 @@ import { db } from "../../../lib/db";
 
 async function enrichPlays() {
   try {
-    const plays = await db.plays.getRecent(100);
-    const playsWithoutImages = plays.filter((p: any) => !p.album_image);
+    const supabaseUrl = process.env.SUPABASE_URL!;
+    const supabaseKey = process.env.SUPABASE_SERVICE_KEY!;
+
+    // Get distinct track IDs without images
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/plays?select=track_id&album_image=is.null&limit=1000`,
+      {
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+        },
+      }
+    );
+    const plays = await res.json();
+    const uniqueTrackIds = [...new Set(plays.map((p: {track_id: string}) => p.track_id).filter(Boolean))];
     
-    if (playsWithoutImages.length === 0) {
+    if (uniqueTrackIds.length === 0) {
       return NextResponse.json({ message: "All plays have images", updated: 0 });
     }
 
-    const trackIds = [...new Set(playsWithoutImages.map((p: any) => p.track_id))].slice(0, 50);
-    const res = await spotifyFetch(`/tracks?ids=${trackIds.join(',')}`);
-    
-    if (!res.ok) {
-      return NextResponse.json({ error: "Failed to fetch from Spotify" }, { status: 500 });
-    }
+    // Process in batches of 50 (Spotify API limit)
+    let totalUpdated = 0;
+    for (let i = 0; i < uniqueTrackIds.length; i += 50) {
+      const batch = uniqueTrackIds.slice(i, i + 50);
+      const spotifyRes = await spotifyFetch(`/tracks?ids=${batch.join(',')}`);
+      
+      if (!spotifyRes.ok) continue;
 
-    const data = await res.json();
-    const trackMap = new Map();
-    
-    data.tracks?.forEach((track: any) => {
-      if (track?.album?.images?.[0]?.url) {
-        trackMap.set(track.id, {
-          album_image: track.album.images[0].url,
-          duration_ms: track.duration_ms,
-        });
-      }
-    });
-
-    const supabaseUrl = process.env.SUPABASE_URL!;
-    const supabaseKey = process.env.SUPABASE_SERVICE_KEY!;
-    
-    let updated = 0;
-    for (const play of playsWithoutImages) {
-      const enrichment = trackMap.get(play.track_id);
-      if (enrichment) {
-        const res = await fetch(
-          `${supabaseUrl}/rest/v1/plays?id=eq.${play.id}`,
-          {
-            method: "PATCH",
-            headers: {
-              apikey: supabaseKey,
-              Authorization: `Bearer ${supabaseKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(enrichment),
-          }
-        );
-        if (res.ok) updated++;
+      const data = await spotifyRes.json();
+      
+      for (const track of data.tracks || []) {
+        if (track?.album?.images?.[0]?.url) {
+          const updateRes = await fetch(
+            `${supabaseUrl}/rest/v1/plays?track_id=eq.${track.id}`,
+            {
+              method: "PATCH",
+              headers: {
+                apikey: supabaseKey,
+                Authorization: `Bearer ${supabaseKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                album_image: track.album.images[0].url,
+                duration_ms: track.duration_ms,
+              }),
+            }
+          );
+          if (updateRes.ok) totalUpdated++;
+        }
       }
     }
 
-    return NextResponse.json({ success: true, updated });
+    return NextResponse.json({ success: true, updated: totalUpdated, processed: uniqueTrackIds.length });
   } catch (error) {
+    console.error('[enrich-plays] Error:', error);
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
