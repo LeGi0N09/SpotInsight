@@ -10,6 +10,16 @@ export async function GET() {
       const data = await currentRes.json();
       
       if (data.is_playing && data.item) {
+        // Check if track is liked
+        let isLiked = false;
+        try {
+          const likedRes = await spotifyFetch(`/me/tracks/contains?ids=${data.item.id}`);
+          if (likedRes.ok) {
+            const likedData = await likedRes.json();
+            isLiked = likedData[0] || false;
+          }
+        } catch {}
+        
         return NextResponse.json({
           isPlaying: true,
           track: {
@@ -21,6 +31,7 @@ export async function GET() {
             duration: data.item.duration_ms,
             progress: data.progress_ms,
             playedAt: new Date().toISOString(),
+            isLiked,
           },
         });
       }

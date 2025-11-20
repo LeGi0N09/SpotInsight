@@ -84,47 +84,45 @@ export default function HealthPage() {
                 </div>
               </div>
 
-              {/* Last 7 Days */}
-              <div className="bg-[#0e0e0e] rounded-2xl p-6 border border-white/5 mb-6">
-                <h2 className="text-lg font-semibold mb-4">Last 7 Days</h2>
-                <div className="space-y-2">
-                  {Array.from({ length: 7 }).reverse().map((_, i) => {
-                    const date = new Date();
-                    date.setDate(date.getDate() - i);
-                    const dateStr = date.toISOString().split('T')[0];
-                    const dayData = health.dailyUptime?.[dateStr];
-                    if (!dayData) return null;
-                    const monthDay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                    return (
-                      <div key={i} className="flex items-center gap-3">
-                        <div className="w-16 text-xs opacity-60">{monthDay}</div>
-                        <div className="flex-1 bg-white/5 rounded h-6 overflow-hidden relative">
-                          <div className="h-full bg-[#00e461]" style={{ width: `${(dayData.success/dayData.total)*100}%` }} />
-                        </div>
-                        <div className="text-xs font-mono w-16">{dayData.success}/{dayData.total}</div>
-                        <div className="text-xs opacity-60 w-16">{dayData.plays}p</div>
-                      </div>
-                    );
-                  }).filter(Boolean)}
-                </div>
-              </div>
-
-              {/* Recent Jobs */}
+              {/* All Cron Jobs - Pass/Fail Icons by Date */}
               <div className="bg-[#0e0e0e] rounded-2xl p-6 border border-white/5">
-                <h2 className="text-lg font-semibold mb-4">Recent Jobs</h2>
-                <div className="space-y-2">
-                  {health.cron?.history?.slice(0, 10).map((log: any, i: number) => (
-                    <div key={i} className="flex items-center justify-between py-2 px-3 bg-[#111111] rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${log.status === 'success' ? 'bg-[#00e461]' : 'bg-red-500'}`} />
-                        <div className="text-xs font-mono opacity-60">{toIST(log.executed_at)}</div>
+                <h2 className="text-lg font-semibold mb-4">All Cron Jobs</h2>
+                <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                  {(() => {
+                    const grouped: Record<string, any[]> = {};
+                    health.cron?.history?.forEach((log: any) => {
+                      const date = new Date(log.executed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                      if (!grouped[date]) grouped[date] = [];
+                      grouped[date].push(log);
+                    });
+                    return Object.entries(grouped).map(([date, logs]) => (
+                      <div key={date} className="flex items-center gap-4 py-3 px-4 bg-[#111111] rounded-lg hover:bg-[#1a1a1a] transition-colors">
+                        <div className="w-24 text-sm font-semibold opacity-70">{date}</div>
+                        <div className="flex-1 flex items-center gap-1.5">
+                          {logs.map((log: any, i: number) => (
+                            <div 
+                              key={i} 
+                              className={`w-6 h-6 rounded flex items-center justify-center cursor-pointer transition-transform hover:scale-110 ${
+                                log.status === 'success' ? 'bg-[#00e461]' : 'bg-red-500'
+                              }`}
+                              title={`${new Date(log.executed_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}\n${log.plays_saved || 0} songs synced\n${log.duration_ms}ms`}
+                            >
+                              {log.status === 'success' ? (
+                                <svg className="w-3.5 h-3.5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              ) : (
+                                <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="text-xs opacity-60">{logs.length} runs</div>
                       </div>
-                      <div className="flex items-center gap-4 text-xs">
-                        <div className="font-mono">{log.plays_saved}p</div>
-                        {log.duration_ms && <div className="opacity-60">{log.duration_ms}ms</div>}
-                      </div>
-                    </div>
-                  )) || <div className="text-center py-8 opacity-60 text-sm">No history</div>}
+                    ));
+                  })() || <div className="text-center py-8 opacity-60 text-sm">No cron job history</div>}
                 </div>
               </div>
             </>

@@ -112,9 +112,9 @@ export async function GET() {
       }
     });
 
-    // Get all recent cron logs (success + failed)
+    // Get all cron logs (success + failed)
     const cronHistoryRes = await fetch(
-      `${supabaseUrl}/rest/v1/cron_logs?select=*&order=executed_at.desc&limit=20`,
+      `${supabaseUrl}/rest/v1/cron_logs?select=*&order=executed_at.desc&limit=1000`,
       {
         headers: {
           apikey: supabaseKey,
@@ -144,7 +144,7 @@ export async function GET() {
         lastRun: lastCronRun || null,
         minutesSinceLastRun,
         status: failedCount > 0 ? "degraded" : (minutesSinceLastRun && minutesSinceLastRun > 10 ? "delayed" : "active"),
-        history: cronHistory?.slice(0, 10) || [],
+        history: cronHistory || [],
       },
       database: {
         totalPlays: totalData?.[0]?.count || 0,

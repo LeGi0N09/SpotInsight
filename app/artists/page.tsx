@@ -13,9 +13,10 @@ export default function ArtistsPage() {
 
   useEffect(() => {
     async function fetchData() {
+      setLoading(true);
       const [statsRes, profileRes] = await Promise.all([
-        fetch(`/api/stats?filter=${filter}`, { cache: "no-store" }),
-        fetch(`/api/spotify/me`, { cache: "no-store" }),
+        fetch(`/api/stats?filter=${filter}`, { cache: 'force-cache' }),
+        fetch(`/api/spotify/me`, { cache: 'force-cache' }),
       ]);
       setStats(statsRes.ok ? await statsRes.json() : {});
       setProfile(profileRes.ok ? await profileRes.json() : {});

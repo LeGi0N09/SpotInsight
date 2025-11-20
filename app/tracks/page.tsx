@@ -6,30 +6,30 @@ import Topbar from "../../components/Topbar";
 import { TrackSkeleton } from "../../components/Skeleton";
 
 export default function TracksPage() {
-  const [filter, setFilter] = useState("alltime");
   const [stats, setStats] = useState<any>({});
   const [profile, setProfile] = useState<any>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
+      setLoading(true);
       const [statsRes, profileRes] = await Promise.all([
-        fetch(`/api/stats?filter=${filter}`, { cache: "no-store" }),
-        fetch(`/api/spotify/me`, { cache: "no-store" }),
+        fetch(`/api/stats`, { cache: 'force-cache' }),
+        fetch(`/api/spotify/me`, { cache: 'force-cache' }),
       ]);
       setStats(statsRes.ok ? await statsRes.json() : {});
       setProfile(profileRes.ok ? await profileRes.json() : {});
       setLoading(false);
     }
     fetchData();
-  }, [filter]);
+  }, []);
 
   return (
     <div className="flex h-screen">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Topbar profile={profile} onFilterChange={setFilter} currentFilter={filter} />
-        <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 pb-4 pt-16 lg:pt-4">
+        <Topbar profile={profile} />
+        <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 pb-32 pt-16 lg:pt-4">
           <h2 className="text-xl sm:text-2xl font-bold mb-4">Top Tracks</h2>
           {loading ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

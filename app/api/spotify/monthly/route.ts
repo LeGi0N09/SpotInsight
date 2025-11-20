@@ -9,37 +9,29 @@ export async function GET() {
   if (!url || !key) return NextResponse.json([]);
 
   try {
-    const res = await fetch(`${url}/rest/v1/plays?select=played_at`, {
+    // Use RPC function for instant aggregation (100x faster than fetching 54k rows)
+    const res = await fetch(`${url}/rest/v1/rpc/get_monthly_plays`, {
+      method: 'POST',
       headers: {
         apikey: key,
         Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
       },
     });
 
-    if (!res.ok) return NextResponse.json([]);
-
-    const rows = await res.json();
-    const map: Record<string, number> = {};
-
-    for (const row of rows) {
-      if (!row.played_at) continue;
-      const date = new Date(row.played_at);
-      if (isNaN(date.getTime())) continue;
-
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      map[key] = (map[key] || 0) + 1;
+    if (!res.ok) {
+      return NextResponse.json([]);
     }
 
-    const result = Object.entries(map)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, plays]) => {
-        const [year, month] = key.split('-');
-        const date = new Date(parseInt(year), parseInt(month) - 1);
-        return {
-          month: date.toLocaleString("en-US", { month: "short", year: "numeric" }),
-          plays,
-        };
-      });
+    const data = await res.json();
+    const result = data.map((row: {month_key: string; plays: number}) => {
+      const [year, month] = row.month_key.split('-');
+      const date = new Date(parseInt(year), parseInt(month) - 1);
+      return {
+        month: date.toLocaleString("en-US", { month: "short", year: "numeric" }),
+        plays: row.plays,
+      };
+    });
 
     return NextResponse.json(result);
   } catch {

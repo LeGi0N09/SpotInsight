@@ -1,10 +1,20 @@
 import { NextResponse } from "next/server";
 
-export const revalidate = 60; // Revalidate every 60 seconds
+export const revalidate = 300; // Cache for 5 minutes
+export const dynamic = 'force-static';
+
+let cachedData: any = null;
+let cacheTime = 0;
+const CACHE_DURATION = 60000; // 1 minute
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const filter = url.searchParams.get("filter") || "alltime";
+  
+  // Return cached data if available and fresh
+  if (cachedData && Date.now() - cacheTime < CACHE_DURATION) {
+    return NextResponse.json(cachedData);
+  }
   
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
@@ -14,55 +24,43 @@ export async function GET(req: Request) {
   }
 
   try {
-    // Get latest snapshot
-    const snapshotRes = await fetch(
-      `${supabaseUrl}/rest/v1/snapshots?select=*&order=synced_at.desc&limit=1`,
-      {
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-        },
-      }
-    );
+    // Fetch snapshot and stats in parallel
+    const [snapshotRes, statsRes] = await Promise.all([
+      fetch(
+        `${supabaseUrl}/rest/v1/snapshots?select=*&order=synced_at.desc&limit=1`,
+        {
+          headers: {
+            apikey: supabaseKey,
+            Authorization: `Bearer ${supabaseKey}`,
+          },
+        }
+      ),
+      fetch(
+        `${supabaseUrl}/rest/v1/rpc/get_play_stats`,
+        {
+          method: 'POST',
+          headers: {
+            apikey: supabaseKey,
+            Authorization: `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      ),
+    ]);
 
-    const snapshots = await snapshotRes.json();
+    const [snapshots, statsData] = await Promise.all([
+      snapshotRes.json(),
+      statsRes.json()
+    ]);
+    
     const snapshot = snapshots[0];
 
     if (!snapshot) {
       return NextResponse.json({ error: "No data synced yet" }, { status: 404 });
     }
 
-    // Get Spotify metadata for enrichment
     const spotifyTracks = snapshot.top_tracks_long || [];
     const spotifyArtists = snapshot.top_artists_long || [];
-
-    // Get total play count
-    const countRes = await fetch(
-      `${supabaseUrl}/rest/v1/plays?select=count`,
-      {
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-          Prefer: 'count=exact',
-        },
-      }
-    );
-    const countData = await countRes.json();
-    const totalPlays = countData?.[0]?.count || 0;
-
-    // Get aggregated stats from Supabase RPC function (100x faster)
-    const statsRes = await fetch(
-      `${supabaseUrl}/rest/v1/rpc/get_play_stats`,
-      {
-        method: 'POST',
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-    const statsData = await statsRes.json();
 
     // Convert to lookup maps
     const trackPlayCounts: Record<string, number> = {};
@@ -128,52 +126,36 @@ export async function GET(req: Request) {
       };
     });
 
-    // Fetch missing artist metadata from Spotify
-    const artistsNeedingMetadata = topArtistsByPlays
-      .filter(([artistName]) => !artistMetadata.has(artistName))
-      .slice(0, 10)
-      .map(([artistName]) => artistName);
-
-    if (artistsNeedingMetadata.length > 0) {
-      const { spotifyFetch } = await import('../../lib/spotify');
-      for (const artistName of artistsNeedingMetadata) {
-        try {
-          const searchRes = await spotifyFetch(`/search?q=${encodeURIComponent(artistName)}&type=artist&limit=1`);
-          if (searchRes.ok) {
-            const data = await searchRes.json();
-            const artist = data.artists?.items?.[0];
-            if (artist) {
-              artistMetadata.set(artistName, {
-                id: artist.id,
-                name: artist.name,
-                images: artist.images,
-                genres: artist.genres,
-                followers: artist.followers,
-                popularity: artist.popularity,
-              });
-            }
-          }
-        } catch {
-          console.error(`[stats] Failed to fetch artist: ${artistName}`);
-        }
+    // Get artist cache from database
+    const artistCacheRes = await fetch(
+      `${supabaseUrl}/rest/v1/artist_cache?select=*`,
+      {
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+        },
       }
-    }
+    );
+    const artistCache = await artistCacheRes.json();
+    const artistCacheMap = new Map(artistCache.map((a: any) => [a.name.toLowerCase(), a]));
 
-    // Format artists with metadata
-    const formattedArtists = topArtistsByPlays.map(([artistName, playCount], i) => {
-      const meta = artistMetadata.get(artistName) as SpotifyArtist | undefined;
-      return {
-        id: meta?.id || artistName,
-        name: artistName,
-        image: meta?.images?.[0]?.url,
-        genres: meta?.genres || [],
-        rank: i + 1,
-        playCount,
-        totalTimeMs: artistNameTime[artistName] || 0,
-        followers: meta?.followers?.total,
-        popularity: meta?.popularity,
-      };
-    });
+    // Format artists with metadata from cache or snapshot
+   const formattedArtists = topArtistsByPlays.map(([artistName, playCount], i) => {
+  const meta = artistMetadata.get(artistName) as SpotifyArtist | undefined;
+
+  return {
+    id: meta?.id || artistName,
+    name: artistName,
+    image: meta?.images?.[0]?.url,
+    genres: meta?.genres || [],
+    rank: i + 1,
+    playCount,
+    totalTimeMs: artistNameTime[artistName] || 0,
+    followers: meta?.followers?.total,
+    popularity: meta?.popularity,
+  };
+});
+
 
     // Extract genres from top artists
     const genreCounts: Record<string, number> = {};
@@ -188,9 +170,11 @@ export async function GET(req: Request) {
       .slice(0, 10)
       .map(([genre, count]) => ({ genre, count }));
 
+    // Calculate total plays from aggregated data (faster than separate count query)
+    const totalPlays = Object.values(trackPlayCounts).reduce((sum, count) => sum + count, 0);
     const hasImportedData = totalPlays > 100;
 
-    return NextResponse.json({
+    const result = {
       filter,
       totalPlays,
       hasImportedData,
@@ -198,7 +182,13 @@ export async function GET(req: Request) {
       topArtists: formattedArtists,
       topGenres,
       lastSynced: snapshot.synced_at,
-    });
+    };
+    
+    // Cache the result
+    cachedData = result;
+    cacheTime = Date.now();
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error('[stats] Error:', error);
     return NextResponse.json({ error: "Failed to fetch stats" }, { status: 500 });

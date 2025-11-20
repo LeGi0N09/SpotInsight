@@ -10,14 +10,15 @@ export default function ActivityPage() {
   const [plays, setPlays] = useState<any[]>([]);
   const [profile, setProfile] = useState<any>({});
   const [loading, setLoading] = useState(true);
-  const [displayCount, setDisplayCount] = useState(20);
+  const [displayCount, setDisplayCount] = useState(50);
+  const [totalLoaded, setTotalLoaded] = useState(100);
 
   useEffect(() => {
     async function fetchData(showLoading = true) {
       if (showLoading) setLoading(true);
       const [playsRes, profileRes] = await Promise.all([
-        fetch(`/api/plays`, { cache: "no-store" }),
-        fetch(`/api/spotify/me`, { cache: "no-store" }),
+        fetch(`/api/plays?limit=${totalLoaded}`, { next: { revalidate: 30 } }),
+        fetch(`/api/spotify/me`, { next: { revalidate: 3600 } }),
       ]);
       const newPlays = playsRes.ok ? await playsRes.json() : [];
       setPlays(newPlays);
@@ -25,9 +26,9 @@ export default function ActivityPage() {
       setLoading(false);
     }
     fetchData();
-    const interval = setInterval(() => fetchData(false), 30000); // Background refresh
+    const interval = setInterval(() => fetchData(false), 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [totalLoaded]);
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -145,13 +146,21 @@ export default function ActivityPage() {
                 </div>
               ))}
               {hasMore && (
-                <div className="flex justify-center pt-4">
+                <div className="flex justify-center pt-4 gap-3">
                   <button
-                    onClick={() => setDisplayCount(prev => prev + 20)}
+                    onClick={() => setDisplayCount(prev => prev + 50)}
                     className="bg-[#00e461] hover:bg-[#00e461]/90 text-black font-semibold px-6 py-3 rounded-full transition-all hover:scale-105 active:scale-95"
                   >
                     Show More ({plays.length - displayCount} remaining)
                   </button>
+                  {displayCount >= plays.length && totalLoaded < 500 && (
+                    <button
+                      onClick={() => setTotalLoaded(prev => Math.min(prev + 100, 500))}
+                      className="bg-[#1a1a1a] hover:bg-[#2a2a2a] text-white font-semibold px-6 py-3 rounded-full transition-all hover:scale-105 active:scale-95"
+                    >
+                      Load More from Database
+                    </button>
+                  )}
                 </div>
               )}
             </div>

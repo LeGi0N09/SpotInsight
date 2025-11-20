@@ -34,31 +34,6 @@ export default function Topbar({ profile, onFilterChange, currentFilter = 'allti
   return (
     <div className="flex items-center justify-end bg-[#0e0e0e] px-4 sm:px-6 py-3 border-b border-white/5">
       <div className="flex items-center gap-3">
-        <div className="relative">
-          <button 
-            onClick={() => setShowFilterMenu(!showFilterMenu)}
-            className="flex items-center gap-2 bg-[#171717] px-3 py-1.5 rounded-full text-xs hover:bg-[#1f1f1f] transition-colors"
-          >
-            <Calendar className="w-3.5 h-3.5" />
-            <span>{filters.find(f => f.value === currentFilter)?.label}</span>
-          </button>
-          {showFilterMenu && (
-            <div className="absolute top-full mt-1 right-0 bg-[#171717] rounded-lg shadow-lg py-1 z-[70] border border-white/10">
-              {filters.map(filter => (
-                <button
-                  key={filter.value}
-                  onClick={() => {
-                    onFilterChange?.(filter.value);
-                    setShowFilterMenu(false);
-                  }}
-                  className="block w-full text-left px-4 py-2 text-xs hover:bg-[#1f1f1f] transition-colors whitespace-nowrap"
-                >
-                  {filter.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
         <button className="p-2 rounded-full bg-[#171717] hover:bg-[#1f1f1f] transition-colors">
           <Bell className="w-4 h-4" />
         </button>

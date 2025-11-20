@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Music } from "lucide-react";
+import { Music, Heart } from "lucide-react";
 
 interface NowPlayingData {
   isPlaying: boolean;
@@ -11,6 +11,7 @@ interface NowPlayingData {
     image?: string;
     progress: number;
     duration: number;
+    isLiked?: boolean;
   };
 }
 
@@ -137,6 +138,9 @@ export default function MiniPlayer() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {nowPlaying.track.isLiked && (
+              <Heart className="w-4 h-4 fill-[#00e461] text-[#00e461]" />
+            )}
             <Equalizer />
           </div>
         </div>
