@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { Music, Heart } from "lucide-react";
 
 interface NowPlayingData {
@@ -43,6 +44,7 @@ export default function MiniPlayer() {
       const res = await fetch("/api/now-playing");
       const data = await res.json();
       setNowPlaying(data);
+
       if (data.isPlaying && data.track?.progress) {
         setLocalProgress(data.track.progress);
       }
@@ -72,51 +74,60 @@ export default function MiniPlayer() {
       ? Math.min((localProgress / nowPlaying.track.duration) * 100, 100)
       : 0;
 
+  const cover = nowPlaying.track.image;
+
   return (
     <>
       <style jsx global>{`
         @keyframes equalize {
-          0%, 100% { height: 4px; }
-          50% { height: 12px; }
-        }
-        @keyframes marquee {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
+          0%,
+          100% {
+            height: 4px;
+          }
+          50% {
+            height: 12px;
+          }
         }
         @keyframes spin-slow {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
         }
       `}</style>
+
       <div className="fixed bottom-0 left-0 right-0 backdrop-blur-xl bg-black/40 border-t border-white/5 z-50 animate-[slideUp_0.35s_ease-out]">
+        {/* Progress bar */}
         <div className="relative h-1 bg-[#1a1a1a] group cursor-pointer">
           <div
-            className="h-full bg-gradient-to-r from-[#00e461] to-[#0aff94] transition-[width] duration-500 ease-linear"
+            className="h-full bg-[#00e461] transition-[width] duration-500 ease-linear"
             style={{ width: `${progress}%` }}
           />
-          <div className="absolute inset-x-0 -top-6 flex justify-between px-4 opacity-0 group-hover:opacity-100 transition-opacity">
-            <span className="text-[10px] text-white/60 bg-black/80 px-2 py-0.5 rounded">
-              {formatTime(localProgress)}
-            </span>
-            <span className="text-[10px] text-white/60 bg-black/80 px-2 py-0.5 rounded">
-              {formatTime(nowPlaying.track.duration)}
-            </span>
-          </div>
         </div>
+
+        {/* Player */}
         <div className="flex items-center justify-between px-4 py-3 hover:bg-white/5 transition-all">
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            {nowPlaying.track.image ? (
-              <div className="relative">
-                <img
-                  src={nowPlaying.track.image}
+            {/* Album Art */}
+            {cover ? (
+              <div className="relative w-12 h-12">
+                <Image
+                  src={cover}
                   alt={nowPlaying.track.name}
-                  className="w-12 h-12 rounded shadow-md animate-[spin-slow_20s_linear_infinite]"
+                  fill
+                  sizes="48px"
+                  className="rounded shadow-md animate-[spin-slow_20s_linear_infinite]"
                 />
+
+                {/* Blur glow bg */}
                 <div
                   className="absolute inset-0 -z-10 blur-xl opacity-40 rounded"
                   style={{
-                    backgroundImage: `url(${nowPlaying.track.image})`,
+                    backgroundImage: `url(${cover})`,
                     backgroundSize: "cover",
+                    backgroundPosition: "center",
                   }}
                 />
               </div>
@@ -125,6 +136,8 @@ export default function MiniPlayer() {
                 <Music className="w-5 h-5 opacity-40" />
               </div>
             )}
+
+            {/* Track Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-[#00e461] animate-pulse" />
@@ -137,6 +150,8 @@ export default function MiniPlayer() {
               </div>
             </div>
           </div>
+
+          {/* Liked + EQ */}
           <div className="flex items-center gap-3">
             {nowPlaying.track.isLiked && (
               <Heart className="w-4 h-4 fill-[#00e461] text-[#00e461]" />

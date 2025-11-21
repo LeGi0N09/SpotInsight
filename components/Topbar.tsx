@@ -1,7 +1,6 @@
-'use client';
+"use client";
 
-import { Calendar, Bell } from 'lucide-react';
-import { useState } from 'react';
+import { Bell } from "lucide-react";
 
 interface ProfileResponse {
   display_name?: string;
@@ -11,41 +10,43 @@ interface ProfileResponse {
 
 interface TopbarProps {
   profile: ProfileResponse;
-  onFilterChange?: (filter: string) => void;
-  currentFilter?: string;
 }
 
-export default function Topbar({ profile, onFilterChange, currentFilter = 'alltime' }: TopbarProps) {
-  const [showFilterMenu, setShowFilterMenu] = useState(false);
+export default function Topbar({ profile }: TopbarProps) {
+  const name = profile?.display_name ?? "User";
 
-  const initials = profile.display_name
-    ?.split(' ')
-    .map(n => n[0])
-    .join('')
+  const initials = name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
     .toUpperCase()
-    .slice(0, 2) || 'U';
+    .slice(0, 2);
 
-  const filters = [
-    { value: 'alltime', label: 'All Time' },
-    { value: 'year', label: 'Last 6 Months' },
-    { value: 'month', label: 'Last 4 Weeks' },
-  ];
+  const avatarUrl = profile?.images?.[0]?.url ?? null;
 
   return (
-    <div className="flex items-center justify-end bg-[#0e0e0e] px-4 sm:px-6 py-3 border-b border-white/5">
-      <div className="flex items-center gap-3">
-        <button className="p-2 rounded-full bg-[#171717] hover:bg-[#1f1f1f] transition-colors">
-          <Bell className="w-4 h-4" />
+    <div className="flex items-center justify-end px-4 sm:px-6 py-3 bg-[#0e0e0e] border-b border-white/5 backdrop-blur-xl">
+      <div className="flex items-center gap-4">
+        {/* Notification */}
+        <button
+          className="p-2 rounded-full bg-[#161616] hover:bg-[#1f1f1f] border border-white/5 
+                     transition-all active:scale-95 shadow-sm"
+        >
+          <Bell className="w-4 h-4 opacity-80" />
         </button>
-        <div className="text-xs opacity-60 hidden sm:block">{profile.display_name || 'User'}</div>
-        {profile.images?.[0]?.url ? (
+
+        {/* Username */}
+        <div className="hidden sm:block text-sm text-white/80">{name}</div>
+
+        {/* Avatar */}
+        {avatarUrl ? (
           <img
-            src={profile.images[0].url}
-            alt={profile.display_name}
-            className="w-8 h-8 rounded-full object-cover"
+            src={avatarUrl}
+            alt={name}
+            className="w-9 h-9 rounded-full object-cover border border-white/10 shadow-inner"
           />
         ) : (
-          <div className="w-8 h-8 rounded-full bg-[#00e461] text-black flex items-center justify-center text-xs font-bold">
+          <div className="w-9 h-9 rounded-full bg-[#00e461] text-black flex items-center justify-center text-xs font-bold shadow-inner">
             {initials}
           </div>
         )}

@@ -1,109 +1,158 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Play, Pause, Music } from "lucide-react";
+import Image from "next/image";
+
+interface Track {
+  name: string;
+  artist: string;
+  image?: string;
+  duration: number;
+  progress?: number;
+  playedAt?: string;
+}
+
+interface NowPlayingResponse {
+  isPlaying: boolean;
+  track: Track | null;
+}
 
 export default function NowPlaying() {
-  const [nowPlaying, setNowPlaying] = useState<any>(null);
+  const [nowPlaying, setNowPlaying] = useState<NowPlayingResponse | null>(null);
   const [localProgress, setLocalProgress] = useState(0);
 
   useEffect(() => {
     const fetchNowPlaying = async () => {
       const res = await fetch("/api/now-playing");
-      const data = await res.json();
+      const data: NowPlayingResponse = await res.json();
       setNowPlaying(data);
+
       if (data.isPlaying && data.track?.progress) {
         setLocalProgress(data.track.progress);
       }
     };
 
     fetchNowPlaying();
-    const interval = setInterval(fetchNowPlaying, 30000); // Poll every 30s instead of 5s
-
+    const interval = setInterval(fetchNowPlaying, 30000);
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    if (!nowPlaying?.isPlaying || !nowPlaying?.track?.duration) return;
-    
+    if (!nowPlaying?.isPlaying || !nowPlaying.track?.duration) return;
+
     const interval = setInterval(() => {
-      setLocalProgress(prev => Math.min(prev + 1000, nowPlaying.track.duration));
+      setLocalProgress((prev) =>
+        Math.min(prev + 1000, nowPlaying.track!.duration)
+      );
     }, 1000);
-    
+
     return () => clearInterval(interval);
   }, [nowPlaying?.isPlaying, nowPlaying?.track?.duration]);
 
+  const formatTimeAgo = useMemo(() => {
+    return (timestamp: string) => {
+      const diffMinutes = Math.floor(
+        (Date.now() - new Date(timestamp).getTime()) / 60000
+      );
+
+      if (diffMinutes < 1) return "Just now";
+      if (diffMinutes < 60) return `${diffMinutes}m ago`;
+      return `${Math.floor(diffMinutes / 60)}h ago`;
+    };
+  }, []);
+
+  // Loading State
   if (!nowPlaying) {
     return (
-      <div className="bg-[#0e0e0e] rounded-2xl p-4 border border-white/5">
-        <div className="flex items-center gap-3">
-          <div className="w-16 h-16 bg-[#1a1a1a] rounded flex items-center justify-center">
-            <Music className="w-6 h-6 opacity-40" />
+      <div className="bg-[#101010] border border-white/10 rounded-2xl p-5 shadow-lg">
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 rounded-xl bg-white/10 flex justify-center items-center">
+            <Music className="w-7 h-7 opacity-40" />
           </div>
-          <div className="flex-1">
+          <div>
             <div className="text-sm opacity-60">Now Playing</div>
-            <div className="text-xs opacity-40 mt-1">Loading...</div>
+            <div className="text-xs opacity-40">Loading...</div>
           </div>
         </div>
       </div>
     );
   }
 
-  const formatTimeAgo = (timestamp: string) => {
-    const diffMinutes = Math.floor((Date.now() - new Date(timestamp).getTime()) / 60000);
-    if (diffMinutes < 1) return "Just now";
-    if (diffMinutes < 60) return `${diffMinutes}m ago`;
-    return `${Math.floor(diffMinutes / 60)}h ago`;
-  };
-
+  // Not Playing State
   if (!nowPlaying.isPlaying) {
     return (
-      <div className="bg-[#0e0e0e] rounded-2xl p-4 border border-white/5">
-        <div className="flex items-center gap-3">
+      <div className="bg-[#101010] border border-white/10 rounded-2xl p-5 shadow-lg">
+        <div className="flex items-center gap-4">
           {nowPlaying.track?.image ? (
-            <img src={nowPlaying.track.image} alt={nowPlaying.track.name} className="w-16 h-16 rounded opacity-60" />
+            <Image
+              src={nowPlaying.track.image}
+              alt={nowPlaying.track.name}
+              width={64}
+              height={64}
+              className="rounded-xl opacity-70"
+            />
           ) : (
-            <div className="w-16 h-16 bg-[#1a1a1a] rounded flex items-center justify-center">
-              <Pause className="w-6 h-6 opacity-40" />
+            <div className="w-16 h-16 rounded-xl bg-white/10 flex justify-center items-center">
+              <Pause className="w-7 h-7 opacity-40" />
             </div>
           )}
-          <div className="flex-1 min-w-0">
+
+          <div className="min-w-0">
             <div className="text-sm opacity-60">Last Played</div>
-            <div className="text-xs font-medium truncate">{nowPlaying.track?.name || 'Unknown'}</div>
-            <div className="text-xs opacity-40 mt-1">{nowPlaying.track?.playedAt ? formatTimeAgo(nowPlaying.track.playedAt) : 'Play something on Spotify'}</div>
+            <div className="text-base font-semibold truncate">
+              {nowPlaying.track?.name}
+            </div>
+            <div className="text-xs opacity-50 mt-1">
+              {nowPlaying.track?.playedAt
+                ? formatTimeAgo(nowPlaying.track.playedAt)
+                : "Play something on Spotify"}
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  const progress = localProgress && nowPlaying.track.duration 
-    ? Math.min((localProgress / nowPlaying.track.duration) * 100, 100)
-    : 0;
+  // Playing State
+  const progress =
+    localProgress && nowPlaying.track?.duration
+      ? Math.min((localProgress / nowPlaying.track.duration) * 100, 100)
+      : 0;
 
   return (
-    <div className="bg-[#0e0e0e] rounded-2xl p-4 border border-[#00e461]/20 animate-fadeIn">
-      <div className="flex items-center gap-3 mb-2">
-        <div className="relative">
-          {nowPlaying.track.image ? (
-            <img src={nowPlaying.track.image} alt={nowPlaying.track.name} className="w-16 h-16 rounded" />
-          ) : (
-            <div className="w-16 h-16 bg-[#1a1a1a] rounded flex items-center justify-center">
-              <Music className="w-6 h-6 opacity-40" />
-            </div>
-          )}
-          <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-[#00e461] rounded-full flex items-center justify-center animate-pulse">
-            <Play className="w-3 h-3 text-black fill-black" />
+    <div className="bg-[#101010] border border-white/10 rounded-2xl p-5 shadow-xl">
+      <div className="flex items-center gap-4 mb-3">
+        {nowPlaying.track?.image ? (
+          <Image
+            src={nowPlaying.track.image}
+            alt={nowPlaying.track.name}
+            width={72}
+            height={72}
+            className="rounded-xl shadow-md"
+          />
+        ) : (
+          <div className="w-16 h-16 rounded-xl bg-white/10 flex justify-center items-center">
+            <Music className="w-7 h-7 opacity-40" />
           </div>
-        </div>
+        )}
+
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold truncate">{nowPlaying.track.name}</div>
-          <div className="text-xs opacity-60 truncate">{nowPlaying.track.artist}</div>
-          <div className="text-xs text-[#00e461] mt-1">🎵 Playing Live</div>
+          <div className="text-base font-semibold truncate">
+            {nowPlaying.track?.name}
+          </div>
+          <div className="text-sm opacity-60 truncate">
+            {nowPlaying.track?.artist}
+          </div>
+          <div className="text-xs text-[#00ff75] mt-1">Playing</div>
         </div>
       </div>
-      <div className="w-full bg-[#1a1a1a] rounded-full h-1">
-        <div className="bg-[#00e461] h-1 rounded-full transition-all" style={{ width: `${progress}%` }} />
+
+      <div className="w-full bg-white/10 rounded-full h-1 overflow-hidden">
+        <div
+          className="h-1 bg-[#00ff75] rounded-full transition-all duration-700"
+          style={{ width: `${progress}%` }}
+        />
       </div>
     </div>
   );

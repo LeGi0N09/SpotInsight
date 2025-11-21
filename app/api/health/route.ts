@@ -1,6 +1,46 @@
 import { NextResponse } from "next/server";
 
-export const revalidate = 30; // Revalidate every 30 seconds
+export const revalidate = 30;
+
+// ─────────────── TYPES ─────────────── //
+
+interface PlayRow {
+  played_at: string | null;
+  created_at: string;
+  source: string | null;
+}
+
+interface SnapshotRow {
+  snapshot_date: string;
+}
+
+interface CronLog {
+  executed_at: string;
+  status: "success" | "failed";
+  plays_saved?: number | null;
+}
+
+interface CronHistoryRow extends CronLog {
+  id: string;
+  error_message?: string | null;
+}
+
+interface RecentRun {
+  timestamp: string;
+  saved: number;
+  success: boolean;
+}
+
+interface DailyUptimeValue {
+  total: number;
+  success: number;
+  failed: number;
+  plays: number;
+}
+
+type DailyUptimeMap = Record<string, DailyUptimeValue>;
+
+// ─────────────── HANDLER ─────────────── //
 
 export async function GET() {
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -10,68 +50,57 @@ export async function GET() {
     return NextResponse.json({ error: "DB not configured" }, { status: 500 });
   }
 
+  const headers = {
+    apikey: supabaseKey,
+    Authorization: `Bearer ${supabaseKey}`,
+  };
+
   try {
-    // Get last play added (any source)
-    const lastPlayRes = await fetch(
-      `${supabaseUrl}/rest/v1/plays?select=played_at,created_at,source&order=created_at.desc&limit=1`,
-      {
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-        },
-      }
-    );
-    const lastPlay = await lastPlayRes.json();
+    // ───── Fetch Everything in Parallel (super fast) ───── //
+    const [
+      lastPlayRes,
+      totalRes,
+      snapshotRes,
+      recentRunsRes,
+      cronLogsRes,
+      cronHistoryRes,
+    ] = await Promise.all([
+      fetch(`${supabaseUrl}/rest/v1/plays?select=played_at,created_at,source&order=created_at.desc&limit=1`, { headers }),
+      fetch(`${supabaseUrl}/rest/v1/plays?select=count`, { headers: { ...headers, Prefer: "count=exact" } }),
+      fetch(`${supabaseUrl}/rest/v1/snapshots?select=snapshot_date&order=snapshot_date.desc&limit=1`, { headers }),
+      fetch(`${supabaseUrl}/rest/v1/plays?select=created_at,source&source=eq.auto-sync&order=created_at.desc&limit=10`, { headers }),
+      fetch(`${supabaseUrl}/rest/v1/cron_logs?select=executed_at,status,plays_saved&order=executed_at.desc&limit=2000`, { headers }),
+      fetch(`${supabaseUrl}/rest/v1/cron_logs?select=*&order=executed_at.desc&limit=1000`, { headers }),
+    ]);
 
-    // Get total plays
-    const totalRes = await fetch(
-      `${supabaseUrl}/rest/v1/plays?select=count`,
-      {
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-          Prefer: "count=exact",
-        },
-      }
-    );
-    const totalData = await totalRes.json();
+    const [lastPlay, totalData, snapshot, recentRuns, cronLogs, cronHistory] =
+      await Promise.all([
+        lastPlayRes.json(),
+        totalRes.json(),
+        snapshotRes.json(),
+        recentRunsRes.json(),
+        cronLogsRes.json(),
+        cronHistoryRes.json(),
+      ]);
 
-    // Get last snapshot
-    const snapshotRes = await fetch(
-      `${supabaseUrl}/rest/v1/snapshots?select=snapshot_date&order=snapshot_date.desc&limit=1`,
-      {
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-        },
-      }
-    );
-    const snapshot = await snapshotRes.json();
+    const last = (lastPlay as PlayRow[])[0] ?? null;
+    const totalPlays = totalData?.[0]?.count ?? 0;
 
-    const lastCronRun = lastPlay?.[0]?.created_at;
-    const minutesSinceLastRun = lastCronRun 
+    // ─────────────── Last Cron Run ─────────────── //
+    const lastCronRun = last?.created_at ?? null;
+    const minutesSinceLastRun = lastCronRun
       ? Math.floor((Date.now() - new Date(lastCronRun).getTime()) / 60000)
       : null;
 
-    // Get last 10 cron runs
-    const recentRunsRes = await fetch(
-      `${supabaseUrl}/rest/v1/plays?select=created_at,source&source=eq.auto-sync&order=created_at.desc&limit=10`,
-      {
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-        },
-      }
-    );
-    const recentRuns = await recentRunsRes.json();
+    // ─────────────── Group recent runs ─────────────── //
+    const groupedRuns: RecentRun[] = [];
+    (recentRuns as PlayRow[]).forEach((play) => {
+      const minuteStamp = new Date(play.created_at).toISOString().slice(0, 16);
+      const group = groupedRuns.find((r) => r.timestamp.startsWith(minuteStamp));
 
-    // Group by timestamp (within 1 minute = same run)
-    const groupedRuns: any[] = [];
-    recentRuns?.forEach((play: any) => {
-      const timestamp = new Date(play.created_at).toISOString().slice(0, 16); // Group by minute
-      const existing = groupedRuns.find(r => r.timestamp.startsWith(timestamp));
-      if (existing) {
-        existing.saved++;
+
+      if (group) {
+        group.saved++;
       } else {
         groupedRuns.push({
           timestamp: play.created_at,
@@ -81,84 +110,76 @@ export async function GET() {
       }
     });
 
-    // Get daily uptime from cron_logs (last 30 days)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    const cronLogsRes = await fetch(
-      `${supabaseUrl}/rest/v1/cron_logs?select=executed_at,status,plays_saved&executed_at=gte.${thirtyDaysAgo.toISOString()}&order=executed_at.desc`,
-      {
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-        },
-      }
-    );
-    const cronLogs = await cronLogsRes.json();
+    // ─────────────── 30-Day Uptime Grouping ─────────────── //
+    const dailyUptime: DailyUptimeMap = {};
 
-    // Group by day with success/failure counts
-    const dailyUptime: Record<string, any> = {};
-    cronLogs?.forEach((log: any) => {
-      const date = new Date(log.executed_at).toISOString().split('T')[0];
-      if (!dailyUptime[date]) {
-        dailyUptime[date] = { total: 0, success: 0, failed: 0, plays: 0 };
-      }
-      dailyUptime[date].total++;
-      if (log.status === 'success') {
-        dailyUptime[date].success++;
-        dailyUptime[date].plays += log.plays_saved || 0;
+    (cronLogs as CronLog[]).forEach((log) => {
+      const date = log.executed_at.split("T")[0];
+
+      const day = (dailyUptime[date] ??= {
+        total: 0,
+        success: 0,
+        failed: 0,
+        plays: 0,
+      });
+
+      day.total++;
+      if (log.status === "success") {
+        day.success++;
+        day.plays += log.plays_saved ?? 0;
       } else {
-        dailyUptime[date].failed++;
+        day.failed++;
       }
     });
 
-    // Get all cron logs (success + failed)
-    const cronHistoryRes = await fetch(
-      `${supabaseUrl}/rest/v1/cron_logs?select=*&order=executed_at.desc&limit=1000`,
-      {
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-        },
-      }
+    // ─────────────── 24 Hour Uptime ─────────────── //
+    const oneDayAgo = new Date(Date.now() - 86400000).toISOString();
+    const last24h = (cronHistory as CronHistoryRow[]).filter(
+      (log) => log.executed_at >= oneDayAgo
     );
-    const cronHistory = await cronHistoryRes.json();
-    const failedJobs = cronHistory?.filter((log: any) => log.status === 'failed') || [];
-    
-    // Calculate uptime percentage (last 24h) - only count actual failures, not 0 plays
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const recentLogs = cronHistory?.filter((log: any) => log.executed_at >= oneDayAgo) || [];
-    const successCount = recentLogs.filter((log: any) => log.status === 'success').length;
-    const failedCount = recentLogs.filter((log: any) => log.status === 'failed').length;
-    const uptimePercentage = recentLogs.length > 0 ? (successCount / recentLogs.length * 100).toFixed(2) : "100";
+
+    const successCount = last24h.filter((l) => l.status === "success").length;
+    const failedCount = last24h.filter((l) => l.status === "failed").length;
+
+    const uptimePercentage =
+      last24h.length > 0
+        ? parseFloat(((successCount / last24h.length) * 100).toFixed(2))
+        : 100;
 
     return NextResponse.json({
       status: "healthy",
       uptime: {
-        percentage: parseFloat(uptimePercentage),
-        last24h: recentLogs.length,
+        percentage: uptimePercentage,
+        last24h: last24h.length,
         successful: successCount,
-        failed: recentLogs.length - successCount,
+        failed: failedCount,
       },
       cron: {
-        lastRun: lastCronRun || null,
+        lastRun: lastCronRun,
         minutesSinceLastRun,
-        status: failedCount > 0 ? "degraded" : (minutesSinceLastRun && minutesSinceLastRun > 10 ? "delayed" : "active"),
-        history: cronHistory || [],
+        status:
+          failedCount > 0
+            ? "degraded"
+            : minutesSinceLastRun && minutesSinceLastRun > 10
+            ? "delayed"
+            : "active",
+        history: cronHistory as CronHistoryRow[],
       },
       database: {
-        totalPlays: totalData?.[0]?.count || 0,
-        lastSnapshot: snapshot?.[0]?.snapshot_date || null,
+        totalPlays,
+        lastSnapshot: (snapshot as SnapshotRow[])?.[0]?.snapshot_date ?? null,
       },
       recentRuns: groupedRuns.slice(0, 10),
       dailyUptime,
-      failedJobs,
+      failedJobs: (cronHistory as CronHistoryRow[]).filter(
+        (l) => l.status === "failed"
+      ),
       timestamp: new Date().toISOString(),
     });
-  } catch (error) {
-    return NextResponse.json({ 
-      status: "error",
-      error: String(error) 
-    }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json(
+      { status: "error", error: String(err) },
+      { status: 500 }
+    );
   }
 }
