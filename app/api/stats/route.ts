@@ -57,9 +57,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "DB not configured" }, { status: 500 });
   }
 
+  const { searchParams } = new URL(req.url);
+  const range = searchParams.get('range') || 'all';
+
   try {
-    // FETCH SNAPSHOT + STATS IN PARALLEL
-    const [snapshotRes, statsRes] = await Promise.all([
+    // FETCH SNAPSHOT + STATS + ARTIST CACHE IN PARALLEL
+    const [snapshotRes, statsRes, artistCacheRes] = await Promise.all([
       fetch(
         `${supabaseUrl}/rest/v1/snapshots?select=*&order=synced_at.desc&limit=1`,
         {
@@ -77,11 +80,20 @@ export async function GET(req: Request) {
           "Content-Type": "application/json",
         },
       }),
+      fetch(`${supabaseUrl}/rest/v1/artist_cache?select=*`, {
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+        },
+      }),
     ]);
 
     const snapshots: SnapshotRow[] = await snapshotRes.json();
     const statsData: StatsRPCResponse = await statsRes.json();
+    const artistCache: any[] = await artistCacheRes.json();
     const snapshot = snapshots[0];
+    
+    console.log(`📦 Artist cache has ${artistCache.length} entries`);
 
     if (!snapshot) {
       return NextResponse.json({ error: "No synced snapshot" }, { status: 404 });
@@ -140,9 +152,29 @@ export async function GET(req: Request) {
     const spotifyArtists = snapshot.top_artists_long ?? [];
 
     const trackMeta = new Map(spotifyTracks.map((t) => [t.id, t]));
+    
+    // Build artist metadata map from snapshot + cache
     const artistMeta = new Map(
       spotifyArtists.map((a) => [a.name.toLowerCase(), a])
     );
+    
+    // Add cached artists as fallback
+    let cacheUsed = 0;
+    for (const cached of artistCache) {
+      const key = cached.name.toLowerCase();
+      if (!artistMeta.has(key)) {
+        artistMeta.set(key, {
+          id: cached.id,
+          name: cached.name,
+          images: cached.image_url ? [{ url: cached.image_url }] : [],
+          genres: cached.genres || [],
+          followers: { total: cached.followers || 0 },
+          popularity: cached.popularity || 0,
+        });
+        cacheUsed++;
+      }
+    }
+    console.log(`✅ Using ${spotifyArtists.length} from snapshot + ${cacheUsed} from cache = ${artistMeta.size} total`);
 
     // FORMAT TRACKS
     const formattedTracks = topTracksByPlays.map(([trackId, playCount], i) => {
@@ -168,6 +200,10 @@ export async function GET(req: Request) {
     const formattedArtists = topArtistsByPlays.map(([name, playCount], i) => {
       const key = name.toLowerCase();
       const snapMeta = artistMeta.get(key);
+      
+      if (!snapMeta && i < 10) {
+        console.log(`⚠️  Missing metadata for #${i+1}: ${name}`);
+      }
 
       return {
         id: snapMeta?.id ?? name,
@@ -181,6 +217,7 @@ export async function GET(req: Request) {
         totalTimeMs: artistTotalTime[name] ?? 0,
       };
     });
+    console.log(`🎤 Formatted ${formattedArtists.length} artists\n`);
 
     // GENRE COUNTS
     const genreCounts: Record<string, number> = {};
@@ -195,8 +232,21 @@ export async function GET(req: Request) {
       .slice(0, 10)
       .map(([genre, count]) => ({ genre, count }));
 
+    // Count unique artists - fallback to direct query if RPC returns 0
+    let totalArtists = Object.keys(artistPlayCounts).length;
+    if (totalArtists === 0) {
+      const artistCountRes = await fetch(
+        `${supabaseUrl}/rest/v1/plays?select=artist_name`,
+        { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
+      );
+      const plays = await artistCountRes.json();
+      const uniqueArtists = new Set(plays.map((p: any) => p.artist_name?.trim()).filter(Boolean));
+      totalArtists = uniqueArtists.size;
+    }
+
     return NextResponse.json({
       totalPlays,
+      totalArtists,
       topTracks: formattedTracks,
       topArtists: formattedArtists,
       topGenres,

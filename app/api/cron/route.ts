@@ -119,12 +119,28 @@ export async function GET(request: Request) {
 
     const duration = Date.now() - startTime;
     
+    // Sync artist metadata if new plays were saved
+    let artistsSynced = 0;
+    if (savedCount > 0) {
+      try {
+        const artistSyncRes = await fetch(`${process.env.NEXT_PUBLIC_URL || 'http://localhost:3000'}/api/sync-artists`, {
+          method: 'POST',
+        });
+        if (artistSyncRes.ok) {
+          const artistData = await artistSyncRes.json();
+          artistsSynced = artistData.synced || 0;
+        }
+      } catch (err) {
+        console.error('Artist sync failed:', err);
+      }
+    }
+    
     await db.cronLogs.insert({
       job_name: 'auto-sync',
       status: 'success',
       plays_saved: savedCount,
       duration_ms: duration,
-      response_data: { saved: savedCount, skipped: skippedCount },
+      response_data: { saved: savedCount, skipped: skippedCount, artistsSynced },
     });
 
     monitor.track({
@@ -139,6 +155,7 @@ export async function GET(request: Request) {
       timestamp: new Date().toISOString(),
       saved: savedCount,
       skipped: skippedCount,
+      artistsSynced,
       duration: duration,
       lastPlayedAt: lastPlayedAt || null,
     });

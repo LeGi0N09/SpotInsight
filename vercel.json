@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/sync-artists",
+      "schedule": "0 2 * * 0"
+    }
+  ]
+}

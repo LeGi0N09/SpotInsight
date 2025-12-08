@@ -2,11 +2,14 @@ import { NextResponse } from "next/server";
 
 export const revalidate = 300; // Revalidate every 5 minutes
 
-export async function GET() {
+export async function GET(req: Request) {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_KEY;
 
   if (!url || !key) return NextResponse.json([]);
+
+  const { searchParams } = new URL(req.url);
+  const range = searchParams.get('range') || 'all';
 
   try {
     // Use RPC function for instant aggregation (100x faster than fetching 54k rows)
