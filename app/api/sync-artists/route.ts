@@ -27,8 +27,8 @@ async function syncArtists() {
         Authorization: `Bearer ${supabaseKey}`,
       },
     });
-    const existingCache = await existingCacheRes.json();
-    const cachedNames = new Set(existingCache.map((c: any) => c.name.toLowerCase()));
+    const existingCache = await existingCacheRes.json() as { name: string }[];
+    const cachedNames = new Set(existingCache.map((c) => c.name.toLowerCase()));
     console.log(`💾 Already cached: ${cachedNames.size} artists`);
     
     // Get snapshot with Spotify artist data
@@ -56,10 +56,10 @@ async function syncArtists() {
       },
     });
 
-    const statsData = await statsRes.json();
+    const statsData = await statsRes.json() as { artistStats?: { artist: string; play_count: number }[] };
     // Sort by play count (descending) - most played artists first
-    const sortedArtists = (statsData.artistStats || []).sort((a: any, b: any) => b.play_count - a.play_count);
-    const artistNames = sortedArtists.map((a: any) => a.artist);
+    const sortedArtists = (statsData.artistStats || []).sort((a, b) => b.play_count - a.play_count);
+    const artistNames = sortedArtists.map((a) => a.artist);
     console.log(`🎵 Found ${artistNames.length} unique artists (sorted by play count)`);
 
     let synced = 0;
@@ -73,12 +73,12 @@ async function syncArtists() {
       `${supabaseUrl}/rest/v1/artist_cache?select=name&last_synced=lt.${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()}`,
       { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
     );
-    const staleCache = await staleRes.json();
-    const staleNames = new Set(staleCache.map((c: any) => c.name.toLowerCase()));
+    const staleCache = await staleRes.json() as { name: string }[];
+    const staleNames = new Set(staleCache.map((c) => c.name.toLowerCase()));
     console.log(`⏰ ${staleNames.size} artists need refresh (>7 days old)`);
     
     // First, cache all Spotify artists from snapshot
-    const snapshotArtistNames = new Set(spotifyArtists.map((a: any) => a.name.toLowerCase()));
+    const snapshotArtistNames = new Set(spotifyArtists.map((a: { name: string }) => a.name.toLowerCase()));
     console.log('\n💾 Syncing snapshot artists...');
     
     for (const artist of spotifyArtists) {
@@ -137,8 +137,16 @@ async function syncArtists() {
       return !snapshotArtistNames.has(key) && (!cachedNames.has(key) || staleNames.has(key));
     });
     console.log(`\n🔍 Searching for ${missingArtists.length} missing/stale artists (top artists first)...`);
+    console.log(`⏱️  Estimated time: ~${Math.round(missingArtists.length * 0.2 / 60)} minutes\n`);
     
-    for (const artistName of missingArtists) {
+    for (let i = 0; i < missingArtists.length; i++) {
+      const artistName = missingArtists[i];
+      
+      // Progress indicator every 50 artists
+      if (i > 0 && i % 50 === 0) {
+        const progress = ((i / missingArtists.length) * 100).toFixed(1);
+        console.log(`\n📊 Progress: ${i}/${missingArtists.length} (${progress}%)\n`);
+      }
       try {
         const searchRes = await spotifyFetch(`/search?q=${encodeURIComponent(artistName)}&type=artist&limit=1`);
         if (!searchRes.ok) continue;
