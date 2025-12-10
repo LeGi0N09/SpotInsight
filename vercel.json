@@ -1,12 +1,1 @@
-{
-  "crons": [
-    {
-      "path": "/api/cron",
-      "schedule": "0 */6 * * *"
-    },
-    {
-      "path": "/api/sync-artists",
-      "schedule": "0 3 * * 0"
-    }
-  ]
-}
+{}
