@@ -4,8 +4,13 @@
 
 Two automated jobs keep your Spotify data fresh:
 
-1. **Play History Sync** - Every 10 minutes
-2. **Artist Metadata Sync** - Weekly (Sundays at 2 AM)
+**Hobby Plan (Free):**
+1. **Play History Sync** - Every 6 hours
+2. **Artist Metadata Sync** - Weekly (Sundays at 3 AM)
+
+**Pro Plan:**
+1. **Play History Sync** - Every 10 minutes (unlimited)
+2. **Artist Metadata Sync** - Weekly with exact timing
 
 ## Local Development
 
@@ -30,19 +35,24 @@ Cron jobs are configured in `vercel.json`:
   "crons": [
     {
       "path": "/api/cron",
-      "schedule": "*/10 * * * *"  // Every 10 minutes
+      "schedule": "0 */6 * * *"   // Every 6 hours (Hobby)
     },
     {
       "path": "/api/sync-artists",
-      "schedule": "0 2 * * 0"      // Sundays at 2 AM
+      "schedule": "0 3 * * 0"     // Sundays at 3 AM
     }
   ]
 }
 ```
 
+**Vercel Hobby Plan Limits:**
+- Max 2 cron jobs per account ✅
+- Runs once per day (timing not guaranteed)
+- For 10-minute syncs, upgrade to Pro or use local cron
+
 ### Setup on Vercel:
 1. Deploy your app to Vercel
-2. Cron jobs auto-activate (Hobby plan: 1 cron, Pro: unlimited)
+2. Cron jobs auto-activate
 3. Set `CRON_SECRET` environment variable
 4. Monitor at: https://vercel.com/[your-project]/settings/cron
 
@@ -67,7 +77,7 @@ curl -X POST http://localhost:3000/api/sync-artists
 1. Fetches last 50 plays from Spotify
 2. Saves new plays to database
 3. Automatically triggers artist metadata sync for new artists
-4. Runs every 10 minutes
+4. Runs every 6 hours (Hobby) or 10 minutes (Pro)
 
 ### Artist Metadata Sync (`/api/sync-artists`)
 1. Checks existing cache (2,128+ artists)
