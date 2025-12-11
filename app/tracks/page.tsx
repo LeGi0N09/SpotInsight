@@ -28,6 +28,7 @@ interface ProfileResponse {
 
 // ──────────────── PAGE ──────────────── //
 export default function TracksPage() {
+  const [timeRange, setTimeRange] = useState<'month' | 'year' | 'all'>('all');
   const [stats, setStats] = useState<StatsResponse>({});
   const [profile, setProfile] = useState<ProfileResponse>({});
   const [loading, setLoading] = useState(true);
@@ -37,7 +38,7 @@ export default function TracksPage() {
       setLoading(true);
 
       const [statsRes, profileRes] = await Promise.all([
-        fetch(`/api/stats`, { cache: "force-cache" }),
+        fetch(`/api/stats?range=${timeRange}`, { cache: "no-store" }),
         fetch(`/api/spotify/me`, { cache: "force-cache" }),
       ]);
 
@@ -47,7 +48,7 @@ export default function TracksPage() {
     }
 
     fetchData();
-  }, []);
+  }, [timeRange]);
 
   return (
     <div className="flex h-screen">
@@ -57,7 +58,41 @@ export default function TracksPage() {
         <Topbar profile={profile} />
 
         <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 pb-32 pt-16 lg:pt-4">
-          <h2 className="text-xl sm:text-2xl font-bold mb-4">Top Tracks</h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl sm:text-2xl font-bold">Top Tracks</h2>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setTimeRange('month')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  timeRange === 'month'
+                    ? 'bg-[#00e461] text-black'
+                    : 'bg-[#1a1a1a] text-white/60 hover:text-white hover:bg-[#222]'
+                }`}
+              >
+                This Month
+              </button>
+              <button
+                onClick={() => setTimeRange('year')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  timeRange === 'year'
+                    ? 'bg-[#00e461] text-black'
+                    : 'bg-[#1a1a1a] text-white/60 hover:text-white hover:bg-[#222]'
+                }`}
+              >
+                Last 12 Months
+              </button>
+              <button
+                onClick={() => setTimeRange('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  timeRange === 'all'
+                    ? 'bg-[#00e461] text-black'
+                    : 'bg-[#1a1a1a] text-white/60 hover:text-white hover:bg-[#222]'
+                }`}
+              >
+                All Time
+              </button>
+            </div>
+          </div>
 
           {loading ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

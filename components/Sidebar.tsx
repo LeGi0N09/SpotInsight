@@ -21,24 +21,6 @@ export default function Sidebar() {
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
 
     {
-      href: "/artists",
-      label: "Top Artists",
-      icon: (props) => (
-        <svg
-          {...props}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-        >
-          <path d="M12 12c2.2 0 4-1.8 4-4s-1.8-4-4-4-4 1.8-4 4 1.8 4 4 4z" />
-          <path d="M3 20c0-3 4-5 9-5s9 2 9 5" />
-        </svg>
-      ),
-    },
-
-    {
       href: "/tracks",
       label: "Top Tracks",
       icon: (props) => (

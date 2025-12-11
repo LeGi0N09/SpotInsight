@@ -11,4 +11,5 @@ jobs:
     steps:
       - name: Trigger play sync
         run: |
-          curl -f "${{ secrets.APP_URL }}/api/cron" || exit 1
+          curl -f "${{ secrets.APP_URL }}/api/cron" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" || exit 1

@@ -35,6 +35,7 @@ interface Genre {
 interface Stats {
   totalPlays?: number;
   totalArtists?: number;
+  totalTracks?: number;
   topArtists?: Artist[];
   topTracks?: Track[];
   topGenres?: Genre[];
@@ -81,44 +82,9 @@ export default function Page() {
         <Topbar profile={profile} />
 
         <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 pb-24 pt-16 lg:pt-6">
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl sm:text-3xl font-bold">Dashboard</h2>
-              <p className="text-sm opacity-60 mt-1">Your Spotify listening analytics</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setTimeRange('month')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  timeRange === 'month'
-                    ? 'bg-[#00e461] text-black'
-                    : 'bg-[#1a1a1a] text-white/60 hover:text-white hover:bg-[#222]'
-                }`}
-              >
-                This Month
-              </button>
-              <button
-                onClick={() => setTimeRange('year')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  timeRange === 'year'
-                    ? 'bg-[#00e461] text-black'
-                    : 'bg-[#1a1a1a] text-white/60 hover:text-white hover:bg-[#222]'
-                }`}
-              >
-                Last 12 Months
-              </button>
-              <button
-                onClick={() => setTimeRange('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  timeRange === 'all'
-                    ? 'bg-[#00e461] text-black'
-                    : 'bg-[#1a1a1a] text-white/60 hover:text-white hover:bg-[#222]'
-                }`}
-              >
-                All Time
-              </button>
-
-            </div>
+          <div className="mb-6">
+            <h2 className="text-2xl sm:text-3xl font-bold">Dashboard</h2>
+            <p className="text-sm opacity-60 mt-1">Your Spotify listening analytics</p>
           </div>
 
           {loading ? (
@@ -137,214 +103,207 @@ export default function Page() {
           ) : (
             <>
               {/* KPI Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 animate-fadeIn">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8 animate-fadeIn">
                 <KPI title="Total Plays" value={(stats.totalPlays as number) || 0} subtitle="All time" />
                 <KPI title="This Month" value={monthly.slice(-1)[0]?.plays || 0} subtitle={monthly.slice(-1)[0]?.month || "Current"} />
-                <KPI title="Unique Artists" value={stats.totalArtists || 0} subtitle="Discovered" />
-                <KPI title="Top Tracks" value={stats.topTracks?.length || 0} subtitle="Tracked" />
+                <KPI title="Unique Artists" value={stats.totalArtists || 0} subtitle="All time" />
+                <KPI title="Unique Tracks" value={stats.totalTracks || 0} subtitle="All time" />
               </div>
 
-              {/* Charts Row */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 animate-fadeIn" style={{ animationDelay: "0.1s" }}>
-                <div className="bg-[#111111] rounded-2xl p-5 sm:p-6 lg:col-span-2 overflow-hidden border border-[#1a1a1a] hover:border-[#2a2a2a] transition-colors">
-                  <div className="flex items-start justify-between mb-6">
+              {/* Main Chart */}
+              <div className="mb-8 animate-fadeIn" style={{ animationDelay: "0.1s" }}>
+                <div className="bg-[#111111] rounded-2xl p-6 border border-[#1a1a1a]">
+                  <div className="flex items-center justify-between mb-6">
                     <div>
-                      <div className="text-xs uppercase tracking-wider opacity-50 mb-2">Listening Activity</div>
-                      <div className="text-3xl sm:text-4xl font-bold">
-                        {monthly.slice(-1)[0]?.plays.toLocaleString() || 0}
-                      </div>
-                      <div className="text-sm opacity-60 mt-1">
-                        {monthly.slice(-1)[0]?.month || "This Month"}
-                      </div>
+                      <h3 className="text-lg font-bold">Listening Activity</h3>
+                      <p className="text-sm opacity-50 mt-1">Last 12 months</p>
                     </div>
                     {monthly.length >= 2 && (() => {
                       const recent = monthly.slice(-12);
                       const current = recent[recent.length - 1]?.plays || 0;
                       const previous = recent[recent.length - 2]?.plays || 1;
-                      const growth = (((current - previous) / previous) * 100).toFixed(1);
-                      const isPositive = parseFloat(growth) >= 0;
+                      const change = (((current - previous) / previous) * 100).toFixed(0);
+                      const isUp = parseFloat(change) >= 0;
                       return (
                         <div className="text-right">
-                          <div className="text-xs opacity-50 mb-1">vs last month</div>
-                          <div className={`text-2xl font-bold ${isPositive ? "text-[#00e461]" : "text-red-400"}`}>
-                            {isPositive ? "+" : ""}{growth}%
+                          <div className="text-2xl font-bold">{current.toLocaleString()}</div>
+                          <div className={`text-sm ${isUp ? "text-[#00e461]" : "text-red-400"}`}>
+                            {isUp ? "+" : ""}{change}% vs last month
                           </div>
                         </div>
                       );
                     })()}
                   </div>
-                  
-                  <div className="relative h-[240px] sm:h-[280px] mb-4 flex gap-3">
-                    {monthly.length > 0 && (() => {
-                      const recentMonths = monthly.slice(-12);
-                      const max = Math.max(...recentMonths.map((d) => d.plays), 1);
-                      const min = Math.min(...recentMonths.map((d) => d.plays));
-                      const range = max - min || 1;
-                      const yLabels = [max, Math.round(max * 0.75), Math.round(max * 0.5), Math.round(max * 0.25), min];
-                      
-                      return (
-                        <>
-                          <div className="flex flex-col justify-between py-2 text-[10px] opacity-40 min-w-[40px] text-right">
-                            {yLabels.map((val, i) => (
-                              <div key={i}>{val.toLocaleString()}</div>
+
+                  {monthly.length > 0 && (() => {
+                    const data = monthly.slice(-12);
+                    const max = Math.max(...data.map(d => d.plays));
+                    const chartHeight = 240;
+                    
+                    return (
+                      <div>
+                        <div className="relative h-64 bg-[#0a0a0a] rounded-lg p-6">
+                          {/* Grid */}
+                          <div className="absolute left-16 right-6 top-6 bottom-10 flex flex-col justify-between">
+                            {[0, 1, 2, 3, 4].map(i => (
+                              <div key={i} className="flex items-center gap-2">
+                                <span className="text-[10px] opacity-40 absolute -left-14 w-12 text-right">
+                                  {Math.round((max * (4 - i)) / 4).toLocaleString()}
+                                </span>
+                                <div className="w-full border-t border-[#222]" />
+                              </div>
                             ))}
                           </div>
-                          
-                          <div className="flex-1 relative">
-                            {hoveredMonth && (
-                              <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-[#0a0a0a] px-4 py-2.5 rounded-lg z-10 border border-[#2a2a2a] shadow-xl">
-                                <div className="text-[10px] uppercase tracking-wider opacity-50 mb-0.5">{hoveredMonth.month}</div>
-                                <div className="text-xl font-bold text-[#00e461]">
-                                  {hoveredMonth.plays.toLocaleString()}
-                                </div>
-                              </div>
-                            )}
+
+                          {/* Chart area */}
+                          <div className="absolute left-16 right-6 top-6 bottom-10">
+                            <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                              <defs>
+                                <linearGradient id="areaGrad" x1="0" x2="0" y1="0" y2="1">
+                                  <stop offset="0%" stopColor="#00e461" stopOpacity="0.2" />
+                                  <stop offset="100%" stopColor="#00e461" stopOpacity="0" />
+                                </linearGradient>
+                              </defs>
+                              <path
+                                d={(() => {
+                                  const points = data.map((m, i) => {
+                                    const x = (i / (data.length - 1)) * 100;
+                                    const y = (1 - m.plays / max) * 100;
+                                    return `${x},${y}`;
+                                  });
+                                  return `M 0,100 L ${points.join(' L ')} L 100,100 Z`;
+                                })()}
+                                fill="url(#areaGrad)"
+                              />
+                              <polyline
+                                points={data.map((m, i) => {
+                                  const x = (i / (data.length - 1)) * 100;
+                                  const y = (1 - m.plays / max) * 100;
+                                  return `${x},${y}`;
+                                }).join(' ')}
+                                fill="none"
+                                stroke="#00e461"
+                                strokeWidth="1"
+                              />
+                            </svg>
                             
-                            {(() => {
-                              const points = recentMonths.map((m, i) => ({
-                                x: (i / Math.max(recentMonths.length - 1, 1)) * 90 + 5,
-                                y: 10 + ((max - m.plays) / range) * 70,
-                                month: m.month,
-                                plays: m.plays,
-                              }));
-                              
-                              let pathD = `M ${points[0].x} ${points[0].y}`;
-                              for (let i = 0; i < points.length - 1; i++) {
-                                const cp1x = points[i].x + (points[i + 1].x - points[i].x) / 3;
-                                const cp1y = points[i].y;
-                                const cp2x = points[i].x + (2 * (points[i + 1].x - points[i].x)) / 3;
-                                const cp2y = points[i + 1].y;
-                                pathD += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${points[i + 1].x} ${points[i + 1].y}`;
-                              }
-                              
-                              const areaPath = `${pathD} L ${points[points.length - 1].x} 88 L ${points[0].x} 88 Z`;
-                              
+                            {/* Hover areas */}
+                            {data.map((m, i) => {
+                              const x = (i / (data.length - 1)) * 100;
+                              const y = (m.plays / max) * 100;
+                              const isHovered = hoveredMonth?.month === m.month;
                               return (
-                                <>
-                                  <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                                    <defs>
-                                      <linearGradient id="areaGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                                        <stop offset="0%" stopColor="#00e461" stopOpacity="0.12" />
-                                        <stop offset="100%" stopColor="#00e461" stopOpacity="0" />
-                                      </linearGradient>
-                                    </defs>
-                                    
-                                    {[0, 1, 2, 3, 4].map((i) => (
-                                      <line
-                                        key={i}
-                                        x1="5"
-                                        y1={10 + i * 17.5}
-                                        x2="95"
-                                        y2={10 + i * 17.5}
-                                        stroke="#1a1a1a"
-                                        strokeWidth="0.3"
-                                      />
-                                    ))}
-                                    
-                                    <path d={areaPath} fill="url(#areaGrad)" />
-                                    <path
-                                      d={pathD}
-                                      fill="none"
-                                      stroke="#00e461"
-                                      strokeWidth="1.8"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                    />
-                                    
-                                    {points.map((p, i) => (
-                                      <g key={i}>
-                                        <circle
-                                          cx={p.x}
-                                          cy={p.y}
-                                          r="2.5"
-                                          fill="#111111"
-                                          className="cursor-pointer"
-                                          onMouseEnter={() => setHoveredMonth({ month: p.month, plays: p.plays })}
-                                          onMouseLeave={() => setHoveredMonth(null)}
-                                        />
-                                        <circle
-                                          cx={p.x}
-                                          cy={p.y}
-                                          r={hoveredMonth?.month === p.month ? "2" : "1.5"}
-                                          fill="#00e461"
-                                          className="cursor-pointer transition-all"
-                                          onMouseEnter={() => setHoveredMonth({ month: p.month, plays: p.plays })}
-                                          onMouseLeave={() => setHoveredMonth(null)}
-                                        />
-                                      </g>
-                                    ))}
-                                  </svg>
-                                  
-                                  <div className="absolute bottom-0 left-0 right-0 flex justify-between px-1">
-                                    {recentMonths.map((m, i) => (
-                                      <div 
-                                        key={i} 
-                                        className={`text-[9px] sm:text-[10px] text-center transition-all ${
-                                          hoveredMonth?.month === m.month ? "opacity-100 font-bold" : "opacity-40"
-                                        }`}
-                                        style={{ width: `${100 / recentMonths.length}%` }}
-                                      >
-                                        {m.month.split(" ")[0]}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </>
+                                <div
+                                  key={i}
+                                  className="absolute w-8 h-full cursor-pointer -translate-x-4"
+                                  style={{ left: `${x}%` }}
+                                  onMouseEnter={() => setHoveredMonth({ month: m.month, plays: m.plays })}
+                                  onMouseLeave={() => setHoveredMonth(null)}
+                                >
+                                  {isHovered && (
+                                    <div className="absolute left-1/2 -translate-x-1/2 bg-[#00e461] text-black px-2 py-1 rounded text-xs font-bold whitespace-nowrap z-10" style={{ bottom: `${y}%`, transform: 'translate(-50%, -120%)' }}>
+                                      {m.month}: {m.plays.toLocaleString()}
+                                    </div>
+                                  )}
+                                </div>
                               );
-                            })()}
+                            })}
                           </div>
-                        </>
-                      );
-                    })()}
-                  </div>
-                  
-                  {monthly.length > 0 && (() => {
-                    const recent = monthly.slice(-12);
-                    const total = recent.reduce((sum, m) => sum + m.plays, 0);
-                    const avg = Math.round(total / recent.length);
-                    const peak = Math.max(...recent.map(m => m.plays));
-                    return (
-                      <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[#1a1a1a]">
-                        <div>
-                          <div className="text-xs opacity-50 mb-1">Avg/Month</div>
-                          <div className="text-lg font-bold">{avg.toLocaleString()}</div>
+
+                          {/* Month labels */}
+                          <div className="absolute left-16 right-6 bottom-2 flex justify-between">
+                            {data.map((m, i) => (
+                              <div key={i} className="text-[9px] opacity-40">
+                                {m.month.split(' ')[0].slice(0, 3)}
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-xs opacity-50 mb-1">Peak Month</div>
-                          <div className="text-lg font-bold text-[#00e461]">{peak.toLocaleString()}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs opacity-50 mb-1">Total (12mo)</div>
-                          <div className="text-lg font-bold">{total.toLocaleString()}</div>
+
+                        <div className="grid grid-cols-3 gap-4 pt-6 mt-6 border-t border-[#1a1a1a]">
+                          <div>
+                            <div className="text-xs opacity-50">Average</div>
+                            <div className="text-xl font-bold mt-1">
+                              {Math.round(data.reduce((s, m) => s + m.plays, 0) / data.length).toLocaleString()}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs opacity-50">Peak</div>
+                            <div className="text-xl font-bold text-[#00e461] mt-1">{max.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs opacity-50">Total</div>
+                            <div className="text-xl font-bold mt-1">
+                              {data.reduce((s, m) => s + m.plays, 0).toLocaleString()}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     );
                   })()}
                 </div>
+              </div>
 
-                <div className="bg-[#111111] rounded-2xl p-4 sm:p-5 h-[400px] sm:h-[450px] overflow-y-auto border border-[#1a1a1a] hover:border-[#2a2a2a] transition-colors">
-                  <div className="flex justify-between items-center mb-4">
-                    <div className="text-sm opacity-60">Top Artists</div>
-                    <div className="text-xs opacity-40">{stats.topArtists?.length || 0} total</div>
+              {/* Top Artists & Tracks */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 animate-fadeIn" style={{ animationDelay: "0.2s" }}>
+                <div className="bg-[#111111] rounded-2xl p-5 border border-[#1a1a1a] hover:border-[#2a2a2a] transition-colors">
+                  <div className="flex justify-between items-center mb-5">
+                    <div>
+                      <div className="text-base font-semibold">Top Artists</div>
+                      <div className="text-xs opacity-50 mt-0.5">{stats.topArtists?.length || 0} total</div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    {stats.topArtists?.slice(0, 15).map((artist, i) => (
-                      <div
-                        key={artist.id}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-[#1a1a1a] transition-colors"
-                      >
-                        <div className="w-7 h-7 rounded-full bg-[#00e461] text-black flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+                    {stats.topArtists?.slice(0, 10).map((artist, i) => (
+                      <div key={artist.id} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-[#1a1a1a] transition-colors">
+                        <div className="w-6 h-6 rounded-full bg-[#00e461] text-black flex items-center justify-center text-xs font-bold flex-shrink-0">
                           {i + 1}
                         </div>
                         {artist.image ? (
-                          <img src={artist.image} alt={artist.name} className="w-11 h-11 rounded-full object-cover flex-shrink-0" />
+                          <img src={artist.image} alt={artist.name} className="w-12 h-12 rounded-full object-cover flex-shrink-0" />
                         ) : (
-                          <div className="w-11 h-11 rounded-full bg-[#1a1a1a] flex-shrink-0" />
+                          <div className="w-12 h-12 rounded-full bg-[#1a1a1a] flex-shrink-0" />
                         )}
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium truncate text-sm">{artist.name}</div>
-                          <div className="text-xs opacity-60">
-                            {artist.playCount?.toLocaleString() || 0} plays
-                          </div>
+                          <div className="font-medium truncate">{artist.name}</div>
+                          <div className="text-xs opacity-60">{artist.playCount?.toLocaleString() || 0} plays</div>
+                          {(artist as any).genres?.length > 0 && (
+                            <div className="flex gap-1 mt-1">
+                              {(artist as any).genres.slice(0, 2).map((g: string, idx: number) => (
+                                <span key={idx} className="text-[9px] px-1.5 py-0.5 rounded bg-[#00e461]/10 text-[#00e461] capitalize">
+                                  {g}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-[#111111] rounded-2xl p-5 border border-[#1a1a1a] hover:border-[#2a2a2a] transition-colors">
+                  <div className="flex justify-between items-center mb-5">
+                    <div>
+                      <div className="text-base font-semibold">Top Tracks</div>
+                      <div className="text-xs opacity-50 mt-0.5">{stats.topTracks?.length || 0} total</div>
+                    </div>
+                  </div>
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+                    {stats.topTracks?.slice(0, 10).map((track, i) => (
+                      <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-[#1a1a1a] transition-colors">
+                        <div className="w-6 h-6 rounded bg-[#00e461] text-black flex items-center justify-center text-xs font-bold flex-shrink-0">
+                          {i + 1}
+                        </div>
+                        {(track as any).image ? (
+                          <img src={(track as any).image} alt={track.name} className="w-12 h-12 rounded object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-12 h-12 rounded bg-[#1a1a1a] flex-shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{track.name}</div>
+                          <div className="text-xs opacity-60 truncate">{track.artist}</div>
+                          <div className="text-xs text-[#00e461] mt-0.5">{track.playCount?.toLocaleString()} plays</div>
                         </div>
                       </div>
                     ))}
@@ -352,30 +311,8 @@ export default function Page() {
                 </div>
               </div>
 
-              {/* Top Tracks Section */}
-              <div className="bg-[#111111] rounded-2xl p-4 sm:p-5 mb-6 animate-fadeIn border border-[#1a1a1a] hover:border-[#2a2a2a] transition-colors" style={{ animationDelay: "0.2s" }}>
-                <div className="flex justify-between items-center mb-4">
-                  <div className="text-sm opacity-60">Top Tracks</div>
-                  <div className="text-xs opacity-40">{stats.topTracks?.length || 0} total</div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {stats.topTracks?.slice(0, 6).map((track, i) => (
-                    <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-[#0a0a0a] hover:bg-[#1a1a1a] transition-colors">
-                      <div className="w-8 h-8 rounded bg-[#00e461] text-black flex items-center justify-center text-xs font-bold flex-shrink-0">
-                        {i + 1}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate text-sm">{track.name}</div>
-                        <div className="text-xs opacity-60 truncate">{track.artist}</div>
-                        <div className="text-xs text-[#00e461] mt-0.5">{track.playCount?.toLocaleString()} plays</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
               {/* Summary Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-4 animate-fadeIn" style={{ animationDelay: "0.3s" }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 animate-fadeIn" style={{ animationDelay: "0.3s" }}>
                 <div className="bg-[#111111] rounded-2xl p-4 border border-[#1a1a1a] hover:border-[#2a2a2a] transition-colors">
                   <div className="text-xs opacity-50 mb-3 flex items-center gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-[#00e461] animate-pulse" />
@@ -407,40 +344,6 @@ export default function Page() {
                   <div className="mt-3 pt-3 border-t border-[#1a1a1a] text-xs opacity-60">
                     Most active: <span className="text-[#00e461] font-medium">Evening</span>
                   </div>
-                </div>
-
-                <div className="bg-[#111111] rounded-2xl p-4 border border-[#1a1a1a] hover:border-[#2a2a2a] transition-colors">
-                  <div className="text-xs opacity-50 mb-3">Listening Stats</div>
-                  {monthly.length > 0 && (() => {
-                    const recent = monthly.slice(-12);
-                    const total = recent.reduce((sum, m) => sum + m.plays, 0);
-                    const avgPerMonth = Math.round(total / recent.length);
-                    const avgPerDay = Math.round(avgPerMonth / 30);
-                    return (
-                      <>
-                        <div className="space-y-3">
-                          <div>
-                            <div className="text-2xl font-bold">{avgPerDay}</div>
-                            <div className="text-xs opacity-60">Avg plays per day</div>
-                          </div>
-                          <div className="pt-3 border-t border-[#1a1a1a] space-y-2">
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs opacity-60">This month</span>
-                              <span className="text-sm font-bold">{monthly.slice(-1)[0]?.plays || 0}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs opacity-60">Last month</span>
-                              <span className="text-sm font-bold">{monthly.slice(-2)[0]?.plays || 0}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs opacity-60">Monthly avg</span>
-                              <span className="text-sm font-bold">{avgPerMonth}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </>
-                    );
-                  })()}
                 </div>
 
                 <div className="bg-[#111111] rounded-2xl p-4 border border-[#1a1a1a] hover:border-[#2a2a2a] transition-colors">

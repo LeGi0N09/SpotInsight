@@ -79,8 +79,9 @@ export async function GET(req: Request) {
           Authorization: `Bearer ${supabaseKey}`,
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({ time_range: range }),
       }),
-      fetch(`${supabaseUrl}/rest/v1/artist_cache?select=*`, {
+      fetch(`${supabaseUrl}/rest/v1/artist_cache?select=*&limit=100000`, {
         headers: {
           apikey: supabaseKey,
           Authorization: `Bearer ${supabaseKey}`,
@@ -158,23 +159,21 @@ export async function GET(req: Request) {
       spotifyArtists.map((a) => [a.name.toLowerCase(), a])
     );
     
-    // Add cached artists as fallback
+    // Add ALL cached artists (overwrite snapshot if cache is newer)
     let cacheUsed = 0;
     for (const cached of artistCache) {
       const key = cached.name.toLowerCase();
-      if (!artistMeta.has(key)) {
-        artistMeta.set(key, {
-          id: cached.id,
-          name: cached.name,
-          images: cached.image_url ? [{ url: cached.image_url }] : [],
-          genres: cached.genres || [],
-          followers: { total: cached.followers || 0 },
-          popularity: cached.popularity || 0,
-        });
-        cacheUsed++;
-      }
+      artistMeta.set(key, {
+        id: cached.id,
+        name: cached.name,
+        images: cached.image_url ? [{ url: cached.image_url }] : [],
+        genres: cached.genres || [],
+        followers: { total: cached.followers || 0 },
+        popularity: cached.popularity || 0,
+      });
+      cacheUsed++;
     }
-    console.log(`✅ Using ${spotifyArtists.length} from snapshot + ${cacheUsed} from cache = ${artistMeta.size} total`);
+    console.log(`✅ Using ${spotifyArtists.length} from snapshot + ${cacheUsed} from cache = ${artistMeta.size} total`)
 
     // FORMAT TRACKS
     const formattedTracks = topTracksByPlays.map(([trackId, playCount], i) => {
@@ -232,21 +231,27 @@ export async function GET(req: Request) {
       .slice(0, 10)
       .map(([genre, count]) => ({ genre, count }));
 
-    // Count unique artists - fallback to direct query if RPC returns 0
-    let totalArtists = Object.keys(artistPlayCounts).length;
-    if (totalArtists === 0) {
-      const artistCountRes = await fetch(
-        `${supabaseUrl}/rest/v1/plays?select=artist_name`,
-        { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
-      );
-      const plays = await artistCountRes.json();
-      const uniqueArtists = new Set(plays.map((p: any) => p.artist_name?.trim()).filter(Boolean));
-      totalArtists = uniqueArtists.size;
-    }
+    // Count unique artists and tracks using RPC
+    const [artistCountRes, trackCountRes] = await Promise.all([
+      fetch(`${supabaseUrl}/rest/v1/rpc/count_unique_artists`, {
+        method: 'POST',
+        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      }),
+      fetch(`${supabaseUrl}/rest/v1/rpc/count_unique_tracks`, {
+        method: 'POST',
+        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      })
+    ]);
+    
+    const totalArtists = await artistCountRes.json();
+    const totalTracks = await trackCountRes.json();
 
     return NextResponse.json({
       totalPlays,
       totalArtists,
+      totalTracks,
       topTracks: formattedTracks,
       topArtists: formattedArtists,
       topGenres,

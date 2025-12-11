@@ -30,8 +30,13 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files - NEVER commit these!
+.env
+.env.local
+.env.development
+.env.production
+.env.*.local
+*.env
 
 # vercel
 .vercel
@@ -39,3 +44,24 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# sensitive files
+*.key
+*.pem
+*.p12
+*.pfx
+*.cer
+*.crt
+
+# local scripts
+local-cron.js
+weekly-artist-sync.js
+
+# logs
+*.log
+logs/
+
+# database
+*.db
+*.sqlite
+*.sqlite3
