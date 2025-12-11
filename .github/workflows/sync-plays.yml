@@ -10,6 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger play sync
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl -f "${{ secrets.APP_URL }}/api/cron" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" || exit 1
+          if [ -z "$APP_URL" ]; then
+            echo "Error: APP_URL secret not set"
+            exit 1
+          fi
+          curl -f "${APP_URL}/api/cron" \
+            -H "Authorization: Bearer ${CRON_SECRET}" || exit 1
