@@ -93,7 +93,7 @@ export async function GET() {
 
     // Filter to only new plays
     const newPlays = plays.filter(
-      (p) => !existingKey.has(`${p.user_id}|${p.track_id}|${p.played_at}`)
+      (p: any) => !existingKey.has(`${p.user_id}|${p.track_id}|${p.played_at}`)
     );
 
     let playRes: Response;
