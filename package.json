@@ -6,9 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "cron": "node local-cron.js",
-    "sync-artists": "node weekly-artist-sync.js"
+    "lint": "eslint"
   },
   "dependencies": {
     "dotenv": "^17.2.3",

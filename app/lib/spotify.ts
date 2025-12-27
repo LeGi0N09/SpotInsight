@@ -1,9 +1,6 @@
-import { monitor } from '../../lib/monitoring';
-
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
 async function refreshAccessToken() {
-  const startTime = Date.now();
   const refreshToken = process.env.SPOTIFY_REFRESH_TOKEN;
   if (!refreshToken) throw new Error("No refresh token");
 
@@ -23,13 +20,6 @@ async function refreshAccessToken() {
 
   const data = await response.json();
   if (!response.ok) {
-    monitor.track({
-      type: 'token_refresh',
-      name: 'spotify',
-      duration: Date.now() - startTime,
-      success: false,
-      error: 'Failed to refresh token',
-    });
     throw new Error("Failed to refresh token");
   }
 
@@ -37,14 +27,7 @@ async function refreshAccessToken() {
     token: data.access_token,
     expiresAt: Date.now() + 50 * 60 * 1000,
   };
-  
-  monitor.track({
-    type: 'token_refresh',
-    name: 'spotify',
-    duration: Date.now() - startTime,
-    success: true,
-  });
-  
+
   return data.access_token;
 }
 

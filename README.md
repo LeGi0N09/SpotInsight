@@ -1,235 +1,171 @@
-# 🎵 Spotify Analytics Dashboard
+# Spotify Analytics Dashboard
 
-Modern, real-time Spotify analytics dashboard built with Next.js 15 that automatically tracks and visualizes your listening history.
+A simple, fast Spotify listening analytics app. Track your top artists, tracks, and genres.
 
-## ✨ Features
+## Quick Start (2 minutes)
 
-- **📊 Real-time Dashboard** - Live KPIs, monthly charts, and top artists
-- **🎧 Now Playing Widget** - Real-time playback with smooth progress bar
-- **🤖 Auto-Sync** - Background cron job saves plays every 5 minutes
-- **💡 Smart Insights** - Listening time, streaks, peak hours, skip rate, loyalty
-- **📜 Activity Feed** - Recent 100 plays with time-ago format
-- **🏥 Health Monitoring** - System uptime, cron status, performance metrics
-- **⚡ Optimized Performance** - Static generation, skeleton loaders, optimistic UI
-- **🎨 Beautiful UI** - Dark theme, responsive design, smooth animations
+### 1. Install & Run
 
-## 🚀 Quick Start
-
-### Prerequisites
-- Node.js 18+
-- Spotify Developer Account
-- Supabase Account
-
-### 1. Install
 ```bash
-cd spotify-frontend
 npm install
-```
-
-### 2. Spotify Setup
-1. Create app at [Spotify Dashboard](https://developer.spotify.com/dashboard)
-2. Add redirect: `http://127.0.0.1:3000/api/auth/callback`
-3. Run `node test-token.js` to get refresh token
-
-### 3. Database Setup
-1. Create [Supabase](https://supabase.com) project
-2. Run SQL files in order:
-   - `supabase-schema.sql`
-   - `supabase-health-system.sql`
-   - `supabase-indexes.sql`
-   - `supabase-migration.sql` (if upgrading)
-
-### 4. Environment Variables
-Create `.env.local`:
-```env
-# Spotify (no access token needed - auto-refreshes)
-SPOTIFY_CLIENT_ID=your_client_id
-SPOTIFY_CLIENT_SECRET=your_client_secret
-SPOTIFY_REDIRECT_URI=http://127.0.0.1:3000/api/auth/callback
-SPOTIFY_REFRESH_TOKEN=your_refresh_token
-
-# Supabase
-SUPABASE_URL=your_supabase_url
-SUPABASE_SERVICE_KEY=your_service_key
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-
-# App
-NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000
-CRON_SECRET=your_random_secret
-```
-
-### 5. Run
-```bash
 npm run dev
 ```
-Visit `http://127.0.0.1:3000`
 
-### 6. Local Cron (Development)
-```bash
-npm run cron
-```
+### 2. Open Dashboard
 
-## 🏗️ Architecture
+Visit `http://localhost:3000`
 
-### Tech Stack
-- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
-- **Database**: Supabase (PostgreSQL)
-- **API**: Spotify Web API
-- **Icons**: Lucide React
+- See your **top artists**, **top tracks**, **top genres**
+- All-time statistics
 
-### Key Features
+### 3. Monitor Syncing
 
-**Auto-Sync System**
-- Runs every 5 minutes via Vercel Cron
-- Uses Spotify's `after` parameter for efficiency
-- Fetches up to 50 new tracks per run
-- In-memory deduplication before DB insert
-- Logs all executions to `cron_logs` table
+Go to `/status` page
 
-**Token Management**
-- Access tokens auto-refresh (50-min cache)
-- SHA256 hashed CRON_SECRET
-- Rate limiting (1 req/min)
-- Monitoring with alerts
-
-**Performance Optimizations**
-- Static generation with revalidation (60s-300s)
-- Database abstraction layer (`lib/db.ts`)
-- Composite indexes for fast queries
-- Skeleton loaders for instant perceived performance
-- Optimistic UI updates
-
-**Monitoring & Alerts**
-- Performance tracking (API, DB, cron, tokens)
-- Auto-alerts on failures
-- Success rate tracking
-- `/api/monitoring` endpoint
-
-## 📁 Project Structure
-
-```
-app/
-├── api/
-│   ├── cron/          # Auto-sync job
-│   ├── health/        # System health
-│   ├── insights/      # Listening insights
-│   ├── monitoring/    # Performance stats
-│   ├── now-playing/   # Current playback
-│   ├── plays/         # Recent plays
-│   ├── stats/         # Top tracks/artists
-│   └── sync/          # Manual sync
-├── activity/          # Activity feed
-├── artists/           # Top artists
-├── health/            # Health monitor
-├── insights/          # Insights page
-├── tracks/            # Top tracks
-└── lib/
-    ├── spotify.ts     # Spotify API client
-    └── time.ts        # IST utilities
-components/
-├── NowPlaying.tsx     # Real-time widget
-├── Sidebar.tsx        # Navigation
-├── Skeleton.tsx       # Loading states
-└── Topbar.tsx         # Filter bar
-lib/
-├── db.ts              # Database layer
-└── monitoring.ts      # Performance tracking
-```
-
-## 🔒 Security
-
-- ✅ Auto-refreshing tokens (never stored)
-- ✅ SHA256 hashed secrets
-- ✅ Rate limiting on cron endpoint
-- ✅ Service key backend-only
-- ✅ Input validation on all endpoints
-- ✅ Monitoring with auto-alerts
-
-## 📊 Database
-
-**Tables**
-- `plays` - Individual play records (UNIQUE: user_id, track_id, played_at)
-- `snapshots` - Spotify rankings snapshots
-- `cron_logs` - Job execution history
-- `system_health` - API monitoring
-
-**Views**
-- `monthly_stats` - Aggregated monthly data
-- `artist_stats` - Artist play counts
-- `listening_streaks` - Consecutive listening days
-- `cron_uptime` - Daily uptime percentages
-
-**Indexes**
-- `idx_plays_user_played_at` - Fast user queries
-- `idx_plays_track_id` - Track lookups
-- `idx_cron_logs_executed_at` - Recent jobs
-
-## 🎯 Key Endpoints
-
-| Endpoint | Cache | Purpose |
-|----------|-------|---------|
-| `/api/cron` | - | Auto-sync (protected) |
-| `/api/stats` | 60s | Top tracks/artists |
-| `/api/insights` | 120s | Listening insights |
-| `/api/health` | 30s | System health |
-| `/api/monitoring` | 0s | Performance stats |
-| `/api/now-playing` | - | Current playback |
-
-## 🐛 Troubleshooting
-
-**No data showing?**
-- Click "Sync Data" in sidebar
-- Check tokens are valid
-- Verify Supabase connection
-
-**Cron not working?**
-- Check `/health` page
-- Verify `CRON_SECRET` is set
-- Run `supabase-migration.sql` if upgrading
-
-**Token errors?**
-- Run `node test-token.js`
-- Update `SPOTIFY_REFRESH_TOKEN`
-- Restart dev server
-
-## 📈 Performance
-
-- **First Load**: ~1-2s (with skeleton loaders)
-- **Cached Pages**: <100ms (static generation)
-- **API Response**: ~50-200ms (with indexes)
-- **Cron Job**: ~500-1500ms per run
-- **Database Queries**: <50ms (optimized)
-
-## 🚀 Production Deployment
-
-1. Deploy to Vercel
-2. Add environment variables
-3. Cron runs automatically (no setup needed)
-4. Monitor via `/health` page
-5. Check `/api/monitoring` for performance
-
-## 📝 Notes
-
-- Use `127.0.0.1` not `localhost` (Spotify requirement)
-- Play counts only show if > 0
-- All timestamps display in IST
-- Health page shows last 7 days uptime
-- Cron frequency: Edit `vercel.json`
-
-## 🎁 Future Improvements
-
-See `IMPROVEMENTS.md` for:
-- Energy/mood graphs
-- Listening clusters
-- Music compatibility
-- Table partitioning (1M+ rows)
-- Advanced analytics
-
-## 📄 License
-
-MIT
+- Click **"Sync Now"** to fetch latest plays
+- View sync history and errors
+- Auto-refresh every 5 seconds
 
 ---
 
-**Built with ❤️ using Spotify Web API**
+## Setup
+
+### Environment Variables
+
+Create `.env.local`:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+SUPABASE_SERVICE_KEY=your_service_key
+SPOTIFY_CLIENT_ID=your_spotify_id
+SPOTIFY_CLIENT_SECRET=your_spotify_secret
+SPOTIFY_REDIRECT_URI=http://localhost:3000/api/auth/callback
+```
+
+### Auto-Sync Options
+
+**Option A: Vercel (Recommended)**
+
+- Deploy to Vercel
+- Cron job runs automatically every hour
+- Check `/status` for sync history
+
+**Option B: External Cron Service**
+
+- Call this endpoint every 15-30 minutes:
+
+```
+POST https://your-domain.com/api/sync
+```
+
+**Option C: Manual Only**
+
+- Use "Sync Now" button on `/status` page anytime
+
+---
+
+## Pages
+
+| Page        | Path      | Purpose                   |
+| ----------- | --------- | ------------------------- |
+| Dashboard   | `/`       | View your stats           |
+| Sync Status | `/status` | Monitor & control syncing |
+
+---
+
+## Features
+
+✅ **Fast** - Loads in 2-3 seconds  
+✅ **Simple** - Clean, minimal UI  
+✅ **Accurate** - All your listening history (no 1000-limit bug)  
+✅ **Reliable** - Error logging built-in  
+✅ **Observable** - See sync status anytime  
+✅ **Flexible** - Multiple sync options
+
+---
+
+## How Data Syncing Works
+
+1. **Sync Frequency**: Every 15-30 minutes (configurable)
+2. **Per Sync**: Fetches your last 50 plays from Spotify
+3. **Storage**: Saved to Supabase with no duplicates
+4. **Accuracy**: Over 1 month = ~4,800-14,400 plays tracked (very accurate)
+5. **Query Limit**: Fixed - uses safe pagination (LIMIT 1000)
+
+---
+
+## Troubleshooting
+
+**Dashboard is slow?**
+
+- Go to `/status`
+- Click "Sync Now"
+- Refresh page after 5 seconds
+
+**No data showing?**
+
+- Check `/status` page for last sync time
+- Verify credentials in `.env.local`
+- Click "Sync Now" and wait 2-5 seconds
+
+**Cron job not running?**
+
+- Check `/status` for error logs
+- For Vercel: check deployment logs
+- For external service: verify endpoint is reachable
+
+---
+
+## Project Structure
+
+```
+├── app/
+│   ├── page.tsx           # Dashboard
+│   ├── status/page.tsx    # Monitoring & control
+│   └── api/
+│       ├── stats/         # Get statistics
+│       ├── sync/          # Trigger sync
+│       ├── health/        # Health check
+│       └── spotify/me     # Get user profile
+├── components/
+│   ├── Sidebar.tsx
+│   └── Topbar.tsx
+├── lib/
+│   ├── db.ts              # Supabase helpers
+│   └── spotify.ts         # Spotify API client
+└── .env.local             # Credentials
+```
+
+---
+
+## Tech Stack
+
+- **Frontend**: Next.js 16, React 19, TypeScript
+- **Database**: Supabase (PostgreSQL)
+- **API**: Spotify Web API
+- **Styling**: Tailwind CSS
+- **Deployment**: Vercel (optional)
+
+---
+
+## What's Different from Stock Spotify Apps
+
+- **No OAuth Required** - Uses Spotify refresh token directly
+- **Lightweight** - No heavy dependencies
+- **Privacy First** - All data stays in your Supabase
+- **Accurate** - Fixed Supabase 1000-limit issue
+- **Fast** - 2-3 second page loads
+- **Simple** - Only 2 pages, zero bloat
+
+---
+
+## Tips
+
+- Run sync every **15-30 minutes** for best accuracy
+- Check `/status` before reporting issues
+- Export your plays regularly if you want backups
+- Artists/tracks data updates weekly via Spotify snapshots
+
+---
+
+**Ready?** Start with `npm run dev`

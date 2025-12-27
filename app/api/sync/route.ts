@@ -17,28 +17,39 @@ async function safeFetch(path: string) {
 export async function GET() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+  const userId = process.env.SYNC_USER_ID || "default_user";
 
   if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.json({ error: "Supabase not configured" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Supabase not configured" },
+      { status: 500 }
+    );
   }
 
-  try {
-    console.log('[sync] Starting sync...');
+  const startTime = Date.now();
 
-    const profile = await safeFetch("/me");
-    const artistsShort = await safeFetch("/me/top/artists?limit=50&time_range=short_term");
-    const artistsMedium = await safeFetch("/me/top/artists?limit=50&time_range=medium_term");
-    const artistsLong = await safeFetch("/me/top/artists?limit=50&time_range=long_term");
-    const tracksShort = await safeFetch("/me/top/tracks?limit=50&time_range=short_term");
-    const tracksMedium = await safeFetch("/me/top/tracks?limit=50&time_range=medium_term");
-    const tracksLong = await safeFetch("/me/top/tracks?limit=50&time_range=long_term");
-    const recent = await safeFetch("/me/player/recently-played?limit=50");
-    const genres = await safeFetch("/recommendations/available-genre-seeds");
+  try {
+    console.log("[sync] Starting sync...");
+
+    // Fetch Spotify data in parallel
+    const [recent, artistsLong, tracksLong] = await Promise.all([
+      safeFetch("/me/player/recently-played?limit=50"),
+      safeFetch("/me/top/artists?limit=50&time_range=long_term"),
+      safeFetch("/me/top/tracks?limit=50&time_range=long_term"),
+    ]);
+
+    if (!recent || !recent.items || recent.items.length === 0) {
+      return NextResponse.json({
+        success: false,
+        error: "No recently played tracks",
+        duration_ms: Date.now() - startTime,
+      });
+    }
 
     const timestamp = new Date().toISOString();
 
-    // Save snapshot
-    const saveRes = await fetch(`${supabaseUrl}/rest/v1/snapshots`, {
+    // Save snapshot (metadata cache)
+    await fetch(`${supabaseUrl}/rest/v1/snapshots`, {
       method: "POST",
       headers: {
         apikey: supabaseKey,
@@ -48,76 +59,129 @@ export async function GET() {
       },
       body: JSON.stringify({
         synced_at: timestamp,
-        profile: profile || {},
-        top_artists_short: artistsShort?.items || [],
-        top_artists_medium: artistsMedium?.items || [],
         top_artists_long: artistsLong?.items || [],
-        top_tracks_short: tracksShort?.items || [],
-        top_tracks_medium: tracksMedium?.items || [],
         top_tracks_long: tracksLong?.items || [],
-        recently_played: recent?.items || [],
-        available_genres: genres?.genres || [],
       }),
-    });
+    }).catch((e) => console.error("[sync] Snapshot save failed:", e));
 
-    if (!saveRes.ok) {
-      console.error('[sync] Failed to save snapshot:', await saveRes.text());
-    }
+    // Save plays - filter out duplicates first
+    const plays = recent.items.map((item: any) => ({
+      user_id: userId,
+      track_id: item.track.id,
+      track_name: item.track.name,
+      artist_name: item.track.artists?.[0]?.name,
+      album_image: item.track.album?.images?.[0]?.url,
+      played_at: item.played_at,
+      ms_played: item.track.duration_ms,
+    }));
 
-    // Save recent plays with enhanced data
-    if (recent?.items) {
-      await fetch(`${supabaseUrl}/rest/v1/plays`, {
-        method: "POST",
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-          "Content-Type": "application/json",
-          Prefer: "resolution=ignore-duplicates",
-        },
-        body: JSON.stringify(
-          recent.items.map((item: any) => ({
-            track_id: item.track.id,
-            track_name: item.track.name,
-            artist_name: item.track.artists?.[0]?.name,
-            played_at: item.played_at,
-            ms_played: item.track.duration_ms,
-            source: 'sync',
-            raw_json: item,
-          }))
-        ),
-      });
-    }
-
-    // Refresh materialized views for fast stats
-    try {
-      await fetch(`${supabaseUrl}/rest/v1/rpc/refresh_stats_views`, {
-        method: "POST",
+    // Get existing plays to avoid duplicates
+    const existingRes = await fetch(
+      `${supabaseUrl}/rest/v1/plays?select=played_at,track_id,user_id&order=played_at.desc&limit=2000`,
+      {
         headers: {
           apikey: supabaseKey,
           Authorization: `Bearer ${supabaseKey}`,
         },
-      });
-    } catch (e) {
-      console.log('[sync] Materialized views refresh skipped (may not exist yet)');
-    }
-
-    return NextResponse.json({ 
-      success: true, 
-      synced_at: timestamp,
-      counts: {
-        profile: profile?.display_name || 'N/A',
-        artists_short: artistsShort?.items?.length || 0,
-        artists_medium: artistsMedium?.items?.length || 0,
-        artists_long: artistsLong?.items?.length || 0,
-        tracks_short: tracksShort?.items?.length || 0,
-        tracks_medium: tracksMedium?.items?.length || 0,
-        tracks_long: tracksLong?.items?.length || 0,
-        recent_plays: recent?.items?.length || 0,
-        genres: genres?.genres?.length || 0,
       }
+    );
+
+    const existing = existingRes.ok ? await existingRes.json() : [];
+    const existingKey = new Set(
+      existing.map((p: any) => `${p.user_id}|${p.track_id}|${p.played_at}`)
+    );
+
+    // Filter to only new plays
+    const newPlays = plays.filter(
+      (p) => !existingKey.has(`${p.user_id}|${p.track_id}|${p.played_at}`)
+    );
+
+    let playRes: Response;
+    let playsSaved = 0;
+
+    if (newPlays.length > 0) {
+      playRes = await fetch(
+        `${supabaseUrl}/rest/v1/plays?on_conflict=user_id,track_id,played_at`,
+        {
+          method: "POST",
+          headers: {
+            apikey: supabaseKey,
+            Authorization: `Bearer ${supabaseKey}`,
+            "Content-Type": "application/json",
+            Prefer: "return=representation,resolution=ignore-duplicates",
+          },
+          body: JSON.stringify(newPlays),
+        }
+      );
+      // Count actual inserted rows; if parsing fails, fall back to attempted count
+      try {
+        const inserted = await playRes.json();
+        playsSaved = Array.isArray(inserted)
+          ? inserted.length
+          : newPlays.length;
+      } catch {
+        playsSaved = newPlays.length;
+      }
+    } else {
+      // No new plays, but still success
+      playRes = new Response(JSON.stringify({ success: true }), {
+        status: 200,
+      });
+      playsSaved = 0;
+    }
+
+    const duration_ms = Date.now() - startTime;
+
+    // Log this sync
+    await fetch(`${supabaseUrl}/rest/v1/cron_logs`, {
+      method: "POST",
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        job_name: "sync",
+        status: playRes.ok ? "success" : "failed",
+        plays_saved: playsSaved,
+        duration_ms,
+        executed_at: timestamp,
+        error_message: !playRes.ok ? await playRes.text() : null,
+      }),
+    }).catch(() => null);
+
+    return NextResponse.json({
+      success: playRes.ok,
+      plays_saved: playsSaved,
+      new_plays: playsSaved,
+      total_plays_processed: plays.length,
+      duration_ms,
+      synced_at: timestamp,
     });
   } catch (error) {
-    console.error('[sync] Error:', error);
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    const duration_ms = Date.now() - startTime;
+    const errorMsg = String(error);
+
+    // Log failure
+    await fetch(`${supabaseUrl}/rest/v1/cron_logs`, {
+      method: "POST",
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        job_name: "sync",
+        status: "failed",
+        duration_ms,
+        executed_at: new Date().toISOString(),
+        error_message: errorMsg,
+      }),
+    }).catch(() => null);
+
+    console.error("[sync] Error:", error);
+    return NextResponse.json({ error: errorMsg, duration_ms }, { status: 500 });
   }
 }
