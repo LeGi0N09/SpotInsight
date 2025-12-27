@@ -154,13 +154,55 @@ export async function GET(req: Request) {
     // Get last synced timestamp from most recent play
     const lastSynced = plays[plays.length - 1]?.created_at || null;
 
+    // 5. Extract genres from top artists using Spotify snapshot data
+    let topGenres: { genre: string; count: number }[] = [];
+    try {
+      const snapshotRes = await fetch(
+        `${supabaseUrl}/rest/v1/snapshots?select=top_artists_long&order=synced_at.desc&limit=1`,
+        {
+          headers: {
+            apikey: supabaseKey,
+            Authorization: `Bearer ${supabaseKey}`,
+          },
+        }
+      );
+
+      if (snapshotRes.ok) {
+        const snapshots = await snapshotRes.json();
+        if (snapshots && snapshots[0]?.top_artists_long) {
+          const genreCounts: Record<string, number> = {};
+
+          // Get top artists from current stats
+          const topArtistNames = new Set(topArtists.map((a) => a.name));
+
+          // Extract genres from Spotify artist data
+          snapshots[0].top_artists_long.forEach((artist: any) => {
+            if (artist.genres && Array.isArray(artist.genres)) {
+              // Weight genres by artist play count
+              const playCount = artistCounts[artist.name] || 1;
+              artist.genres.forEach((genre: string) => {
+                genreCounts[genre] = (genreCounts[genre] || 0) + playCount;
+              });
+            }
+          });
+
+          topGenres = Object.entries(genreCounts)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 20)
+            .map(([genre, count]) => ({ genre, count }));
+        }
+      }
+    } catch (err) {
+      console.error("[stats] Failed to fetch genres:", err);
+    }
+
     return NextResponse.json({
       totalPlays,
       totalArtists: uniqueArtists,
       totalTracks: uniqueTracks,
       topTracks,
       topArtists,
-      topGenres: [],
+      topGenres,
       lastSynced,
     });
   } catch (err) {
