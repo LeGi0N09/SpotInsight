@@ -45,7 +45,7 @@ export async function GET() {
 
     // Step 2: Get existing plays to check for new songs
     const existingRes = await fetch(
-      `${supabaseUrl}/rest/v1/plays?select=played_at,track_id,user_id&order=played_at.desc&limit=100`,
+      `${supabaseUrl}/rest/v1/plays?select=played_at,track_id,user_id&order=played_at.desc&limit=2000`,
       {
         headers: {
           apikey: supabaseKey,

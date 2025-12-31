@@ -278,7 +278,7 @@ export default function StatusPage() {
                       3. External Cron
                     </p>
                     <code className="block bg-black/50 p-3 rounded text-[#00e461] text-xs">
-                      curl https://your-domain.com/api/sync
+                      curl https://spotify-frontend-alpha.vercel.app/api/sync
                     </code>
                   </div>
                   <div>
