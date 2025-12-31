@@ -29,24 +29,75 @@ export async function GET() {
   const startTime = Date.now();
 
   try {
-    console.log("[sync] Starting sync...");
+    console.log("[sync] Starting smart sync...");
 
-    // Fetch Spotify data in parallel
-    const [recent, artistsLong, tracksLong] = await Promise.all([
-      safeFetch("/me/player/recently-played?limit=50"),
-      safeFetch("/me/top/artists?limit=50&time_range=long_term"),
-      safeFetch("/me/top/tracks?limit=50&time_range=long_term"),
-    ]);
+    // Step 1: Check recently played tracks first (lightweight check)
+    const recent = await safeFetch("/me/player/recently-played?limit=50");
 
     if (!recent || !recent.items || recent.items.length === 0) {
       return NextResponse.json({
-        success: false,
-        error: "No recently played tracks",
+        success: true,
+        message: "No recently played tracks",
+        plays_saved: 0,
         duration_ms: Date.now() - startTime,
       });
     }
 
+    // Step 2: Get existing plays to check for new songs
+    const existingRes = await fetch(
+      `${supabaseUrl}/rest/v1/plays?select=played_at,track_id,user_id&order=played_at.desc&limit=100`,
+      {
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+        },
+      }
+    );
+
+    const existing = existingRes.ok ? await existingRes.json() : [];
+    const existingKey = new Set(
+      existing.map((p: any) => `${p.user_id}|${p.track_id}|${p.played_at}`)
+    );
+
+    // Step 3: Count NEW plays only
+    const plays = recent.items.map((item: any) => ({
+      user_id: userId,
+      track_id: item.track.id,
+      track_name: item.track.name,
+      artist_name: item.track.artists?.[0]?.name,
+      album_image: item.track.album?.images?.[0]?.url,
+      played_at: item.played_at,
+      ms_played: item.track.duration_ms,
+    }));
+
+    const newPlays = plays.filter(
+      (p: any) => !existingKey.has(`${p.user_id}|${p.track_id}|${p.played_at}`)
+    );
+
+    // Step 4: SMART SKIP - Only skip if NO new songs (0)
+    if (newPlays.length === 0) {
+      console.log(`[sync] No new plays found. Skipping sync.`);
+      return NextResponse.json({
+        success: true,
+        message: `Skipped: No new songs found. Next check at scheduled time.`,
+        plays_saved: 0,
+        new_plays_found: 0,
+        duration_ms: Date.now() - startTime,
+      });
+    }
+
+    // Step 5: Proceed with FULL sync (any count > 0)
+    console.log(
+      `[sync] Found ${newPlays.length} new plays. Proceeding with full sync...`
+    );
+
     const timestamp = new Date().toISOString();
+
+    // Fetch additional metadata
+    const [artistsLong, tracksLong] = await Promise.all([
+      safeFetch("/me/top/artists?limit=50&time_range=long_term"),
+      safeFetch("/me/top/tracks?limit=50&time_range=long_term"),
+    ]);
 
     // Save snapshot (metadata cache)
     await fetch(`${supabaseUrl}/rest/v1/snapshots`, {
@@ -64,38 +115,7 @@ export async function GET() {
       }),
     }).catch((e) => console.error("[sync] Snapshot save failed:", e));
 
-    // Save plays - filter out duplicates first
-    const plays = recent.items.map((item: any) => ({
-      user_id: userId,
-      track_id: item.track.id,
-      track_name: item.track.name,
-      artist_name: item.track.artists?.[0]?.name,
-      album_image: item.track.album?.images?.[0]?.url,
-      played_at: item.played_at,
-      ms_played: item.track.duration_ms,
-    }));
-
-    // Get existing plays to avoid duplicates
-    const existingRes = await fetch(
-      `${supabaseUrl}/rest/v1/plays?select=played_at,track_id,user_id&order=played_at.desc&limit=2000`,
-      {
-        headers: {
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-        },
-      }
-    );
-
-    const existing = existingRes.ok ? await existingRes.json() : [];
-    const existingKey = new Set(
-      existing.map((p: any) => `${p.user_id}|${p.track_id}|${p.played_at}`)
-    );
-
-    // Filter to only new plays
-    const newPlays = plays.filter(
-      (p: any) => !existingKey.has(`${p.user_id}|${p.track_id}|${p.played_at}`)
-    );
-
+    // Save new plays
     let playRes: Response;
     let playsSaved = 0;
 
