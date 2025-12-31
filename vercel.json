@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/sync",
-      "schedule": "0 9,21 * * *"
+      "schedule": "0 21 * * *"
     }
   ]
 }
