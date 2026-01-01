@@ -5,10 +5,6 @@ export async function GET() {
   try {
     // Try to get currently playing track
     const currentRes = await spotifyFetch("/me/player/currently-playing");
-    console.log(
-      "[current] Currently playing response status:",
-      currentRes.status
-    );
 
     const hasBody = currentRes.headers.get("content-length") !== "0";
     const contentType = currentRes.headers.get("content-type") || "";
@@ -18,8 +14,6 @@ export async function GET() {
         const currentData = contentType.includes("application/json")
           ? await currentRes.json()
           : null;
-
-        console.log("[current] Currently playing data:", currentData);
 
         if (currentData?.item) {
           return NextResponse.json({
@@ -37,13 +31,10 @@ export async function GET() {
     }
 
     // Fallback to recently played if nothing is currently playing
-    console.log("[current] Falling back to recently played...");
     const recentRes = await spotifyFetch("/me/player/recently-played?limit=1");
-    console.log("[current] Recently played response status:", recentRes.status);
 
     if (recentRes.ok) {
       const recentData = await recentRes.json();
-      console.log("[current] Recently played data:", recentData);
       const lastTrack = recentData?.items?.[0];
 
       if (lastTrack) {
@@ -56,13 +47,11 @@ export async function GET() {
       }
     }
 
-    console.log("[current] No track data found");
     return NextResponse.json(
       { track: null, isPlaying: false, error: "No track data" },
       { status: 200 }
     );
   } catch (error) {
-    console.error("[current] Error:", error);
     return NextResponse.json(
       { track: null, error: String(error) },
       { status: 200 }

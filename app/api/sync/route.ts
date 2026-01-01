@@ -29,8 +29,6 @@ export async function GET() {
   const startTime = Date.now();
 
   try {
-    console.log("[sync] Starting smart sync...");
-
     // Step 1: Check recently played tracks first (lightweight check)
     const recent = await safeFetch("/me/player/recently-played?limit=50");
 
@@ -76,7 +74,6 @@ export async function GET() {
 
     // Step 4: SMART SKIP - Only skip if NO new songs (0)
     if (newPlays.length === 0) {
-      console.log(`[sync] No new plays found. Skipping sync.`);
       return NextResponse.json({
         success: true,
         message: `Skipped: No new songs found. Next check at scheduled time.`,
@@ -87,10 +84,6 @@ export async function GET() {
     }
 
     // Step 5: Proceed with FULL sync (any count > 0)
-    console.log(
-      `[sync] Found ${newPlays.length} new plays. Proceeding with full sync...`
-    );
-
     const timestamp = new Date().toISOString();
 
     // Fetch additional metadata
@@ -152,25 +145,6 @@ export async function GET() {
 
     const duration_ms = Date.now() - startTime;
 
-    // Log this sync
-    await fetch(`${supabaseUrl}/rest/v1/cron_logs`, {
-      method: "POST",
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-      },
-      body: JSON.stringify({
-        job_name: "sync",
-        status: playRes.ok ? "success" : "failed",
-        plays_saved: playsSaved,
-        duration_ms,
-        executed_at: timestamp,
-        error_message: !playRes.ok ? await playRes.text() : null,
-      }),
-    }).catch(() => null);
-
     return NextResponse.json({
       success: playRes.ok,
       plays_saved: playsSaved,
@@ -182,24 +156,6 @@ export async function GET() {
   } catch (error) {
     const duration_ms = Date.now() - startTime;
     const errorMsg = String(error);
-
-    // Log failure
-    await fetch(`${supabaseUrl}/rest/v1/cron_logs`, {
-      method: "POST",
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-      },
-      body: JSON.stringify({
-        job_name: "sync",
-        status: "failed",
-        duration_ms,
-        executed_at: new Date().toISOString(),
-        error_message: errorMsg,
-      }),
-    }).catch(() => null);
 
     console.error("[sync] Error:", error);
     return NextResponse.json({ error: errorMsg, duration_ms }, { status: 500 });

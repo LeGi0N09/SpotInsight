@@ -42,25 +42,11 @@ SPOTIFY_CLIENT_SECRET=your_spotify_secret
 SPOTIFY_REDIRECT_URI=http://localhost:3000/api/auth/callback
 ```
 
-### Auto-Sync Options
+### Auto-Sync
 
-**Option A: Vercel (Recommended)**
-
-- Deploy to Vercel
-- Cron job runs automatically every hour
+- Songs are automatically captured when they finish playing
+- Real-time sync with no manual intervention needed
 - Check `/status` for sync history
-
-**Option B: External Cron Service**
-
-- Call this endpoint every 15-30 minutes:
-
-```
-POST https://your-domain.com/api/sync
-```
-
-**Option C: Manual Only**
-
-- Use "Sync Now" button on `/status` page anytime
 
 ---
 
@@ -86,11 +72,11 @@ POST https://your-domain.com/api/sync
 
 ## How Data Syncing Works
 
-1. **Sync Frequency**: Every 15-30 minutes (configurable)
-2. **Per Sync**: Fetches your last 50 plays from Spotify
-3. **Storage**: Saved to Supabase with no duplicates
-4. **Accuracy**: Over 1 month = ~4,800-14,400 plays tracked (very accurate)
-5. **Query Limit**: Fixed - uses safe pagination (LIMIT 1000)
+1. **Automatic Capture**: Songs are captured automatically after they finish playing
+2. **Duplicate Prevention**: Database constraints ensure no duplicates
+3. **Real-Time**: Updates happen immediately without polling delays
+4. **Storage**: Saved to Supabase with accurate Spotify timestamps
+5. **No Manual Action**: Everything happens in the background
 
 ---
 
@@ -108,7 +94,7 @@ POST https://your-domain.com/api/sync
 - Verify credentials in `.env.local`
 - Click "Sync Now" and wait 2-5 seconds
 
-**Cron job not running?**
+**Songs not appearing?**
 
 - Check `/status` for error logs
 - For Vercel: check deployment logs

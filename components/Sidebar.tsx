@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, HelpCircle, Menu, X } from "lucide-react";
+import { LayoutDashboard, HelpCircle, Menu, X, History } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -19,7 +19,7 @@ export default function Sidebar() {
     icon: NavIconType;
   }> = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
-
+    { href: "/plays", label: "Latest Plays", icon: History },
     {
       href: "/status",
       label: "Sync Status",

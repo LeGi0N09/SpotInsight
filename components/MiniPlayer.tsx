@@ -74,7 +74,11 @@ export default function MiniPlayer() {
 
   const { track, isPlaying } = current;
   const artistName = track.artists?.[0]?.name || "Unknown Artist";
-  const imageUrl = track.album?.images?.[0]?.url;
+  const rawImageUrl = track.album?.images?.[0]?.url;
+  // Use image proxy to avoid service worker caching issues
+  const imageUrl = rawImageUrl
+    ? `/api/image-proxy?url=${encodeURIComponent(rawImageUrl)}`
+    : null;
 
   console.log("[MiniPlayer] Rendering with:", {
     trackName: track.name,
@@ -91,34 +95,35 @@ export default function MiniPlayer() {
     >
       {/* Album Art - always visible */}
       <div className="relative w-12 h-12 sm:w-14 sm:h-14 flex-shrink-0 rounded shadow-lg overflow-hidden bg-[#282828]">
-        {imageUrl && !imageError && (
+        {imageUrl && !imageError ? (
           <Image
             src={imageUrl}
             alt={track.name}
             fill
             sizes="(max-width: 640px) 48px, 56px"
-            className={`object-cover ${
+            className={`object-cover transition-opacity ${
               imageLoaded ? "opacity-100" : "opacity-0"
             }`}
             onError={() => {
               console.log("[MiniPlayer] Image failed to load:", imageUrl);
               setImageError(true);
             }}
-            onLoadingComplete={(img) => {
-              const ok = img.naturalWidth > 0;
-              setImageLoaded(ok);
+            onLoadingComplete={() => {
+              console.log("[MiniPlayer] Image loaded successfully");
+              setImageLoaded(true);
             }}
+            unoptimized
             priority
           />
-        )}
+        ) : null}
 
-        {!imageLoaded && (
-          <div className="absolute inset-0 flex items-center justify-center">
+        {!imageLoaded || imageError ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-[#282828]">
             <Music className="w-5 h-5 sm:w-6 sm:h-6 text-[#b3b3b3]" />
           </div>
-        )}
+        ) : null}
 
-        {isPlaying && imageLoaded && (
+        {isPlaying && imageLoaded && !imageError && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/40">
             <div className="flex gap-0.5">
               <div className="w-0.5 h-2 bg-[#00e461] animate-pulse" />

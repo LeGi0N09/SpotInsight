@@ -20,7 +20,7 @@ export async function GET() {
 
   try {
     // Fetch everything in parallel - all with safe limits
-    const [playsRes, snapshotRes, logsRes] = await Promise.all([
+    const [playsRes, snapshotRes] = await Promise.all([
       fetch(`${supabaseUrl}/rest/v1/plays?select=count`, {
         headers: { ...headers, Prefer: "count=exact" },
       }),
@@ -28,32 +28,21 @@ export async function GET() {
         `${supabaseUrl}/rest/v1/snapshots?select=synced_at&order=synced_at.desc&limit=1`,
         { headers }
       ),
-      fetch(
-        `${supabaseUrl}/rest/v1/cron_logs?select=*&order=executed_at.desc&limit=20`,
-        { headers }
-      ),
     ]);
 
-    const [playsData, snapshots, cronLogs] = await Promise.all([
+    const [playsData, snapshots] = await Promise.all([
       playsRes.json(),
       snapshotRes.json(),
-      logsRes.json(),
     ]);
 
     const plays_count = playsData?.[0]?.count || 0;
-    const lastCron =
-      Array.isArray(cronLogs) && cronLogs.length > 0
-        ? cronLogs[0]?.executed_at
-        : null;
     const lastSnapshot = snapshots?.[0]?.synced_at || null;
-    // Prefer latest cron execution time for "Last Sync"; fallback to snapshot
-    const lastSync = lastCron || lastSnapshot || new Date().toISOString();
+    const lastSync = lastSnapshot || new Date().toISOString();
 
     return NextResponse.json({
       status: "online",
       lastSync,
       plays_count,
-      cron_logs: cronLogs || [],
     });
   } catch (error) {
     console.error("[health]", error);

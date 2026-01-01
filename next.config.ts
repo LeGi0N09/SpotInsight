@@ -35,6 +35,8 @@ const nextConfig: NextConfig = {
         "'self'",
         "https://api.spotify.com",
         "https://i.scdn.co",
+        "https://*.scdn.co",
+        "https://*.spotifycdn.com",
         "https://*.supabase.co",
         "https://*.supabase.net",
       ].join(" "),
